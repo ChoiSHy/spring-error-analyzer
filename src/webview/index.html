@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spring Error Analyzer</title>
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <h1>Spring Boot Error Analyzer</h1>
+      <div id="service-tabs"></div>
+    </header>
+    <main id="main">
+      <div id="no-services" class="placeholder">
+        <p>서비스가 없습니다.</p>
+        <p>Command Palette에서 "Spring Error Analyzer: Start Service"를 실행하세요.</p>
+      </div>
+      <div id="service-content" style="display:none;">
+        <div id="service-info">
+          <span id="service-name"></span>
+          <span id="service-status" class="badge"></span>
+          <button id="btn-start" class="btn btn-start">Start</button>
+          <button id="btn-stop" class="btn btn-stop">Stop</button>
+        </div>
+        <div id="panels">
+          <div id="log-panel" class="panel">
+            <h2>Logs</h2>
+            <div id="log-container" class="log-output"></div>
+          </div>
+          <div id="error-panel" class="panel">
+            <h2>Errors <span id="error-count" class="badge badge-error">0</span></h2>
+            <div id="error-list"></div>
+          </div>
+          <div id="analysis-panel" class="panel" style="display:none;">
+            <div id="analysis-header">
+              <h2>Analysis</h2>
+              <button id="btn-close-analysis" class="btn btn-small">Close</button>
+            </div>
+            <div id="analysis-content"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

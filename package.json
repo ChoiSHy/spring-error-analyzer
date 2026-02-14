@@ -1,0 +1,96 @@
+{
+  "name": "spring-boot-error-analyzer",
+  "displayName": "Spring Boot Error Analyzer",
+  "description": "Analyze Spring Boot error logs with local pattern matching and Claude AI",
+  "version": "0.1.0",
+  "publisher": "spring-advisor",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "springErrorAnalyzer.openDashboard",
+        "title": "Spring Error Analyzer: Open Dashboard"
+      },
+      {
+        "command": "springErrorAnalyzer.startService",
+        "title": "Start Service"
+      },
+      {
+        "command": "springErrorAnalyzer.stopService",
+        "title": "Spring Error Analyzer: Stop Service"
+      },
+      {
+        "command": "springErrorAnalyzer.stopAll",
+        "title": "Spring Error Analyzer: Stop All Services"
+      }
+    ],
+    "configuration": {
+      "title": "Spring Error Analyzer",
+      "properties": {
+        "springErrorAnalyzer.claudeApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Claude API Key for AI-powered error analysis"
+        },
+        "springErrorAnalyzer.claudeModel": {
+          "type": "string",
+          "default": "claude-sonnet-4-5-20250929",
+          "description": "Claude model to use for analysis"
+        },
+        "springErrorAnalyzer.maxAiRequestsPerMinute": {
+          "type": "number",
+          "default": 10,
+          "description": "Maximum AI analysis requests per minute"
+        },
+        "springErrorAnalyzer.buildTool": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "gradle",
+            "maven"
+          ],
+          "default": "auto",
+          "description": "Build tool to use (auto-detect, gradle, or maven)"
+        },
+        "springErrorAnalyzer.bootRunProfiles": {
+          "type": "string",
+          "default": "",
+          "description": "Spring profiles to activate (comma-separated)"
+        },
+        "springErrorAnalyzer.jvmArgs": {
+          "type": "string",
+          "default": "",
+          "description": "Additional JVM arguments for Spring Boot"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  }
+}
