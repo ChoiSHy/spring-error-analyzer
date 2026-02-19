@@ -61,8 +61,18 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     confidence: 0.95,
   },
   {
+    name: 'BadSqlGrammarException',
+    pattern: /BadSqlGrammarException|bad SQL grammar|### SQL:|### Cause:|StatementCallback|PreparedStatementCallback|CUBRIDException|Syntax error.*unexpected/i,
+    title: 'SQL Grammar Error (MyBatis/JPA)',
+    description:
+      'MyBatis Mapper XML 또는 JPA에서 실행된 SQL 쿼리의 문법 또는 컬럼·테이블명이 DB에서 인식되지 않습니다.',
+    suggestion:
+      '1. 에러 로그에서 "### SQL:" 구문과 "### Cause:" 아래 DB 오류 메시지를 확인하세요.\n2. Mapper XML의 쿼리에 사용된 컬럼명이 실제 테이블 스키마와 일치하는지 확인하세요.\n3. DB별 예약어 또는 대소문자 규칙을 확인하세요 (예: CUBRID은 대소문자 구분).\n4. UNION ALL 등 복합 쿼리 사용 시 각 SELECT의 컬럼 개수와 타입이 일치하는지 확인하세요.\n5. #{param} 바인딩 타입이 컬럼 타입과 호환되는지 확인하세요.',
+    confidence: 0.88,
+  },
+  {
     name: 'DataAccessException',
-    pattern: /DataAccessException|SQLException|JDBCConnectionException|CannotCreateTransactionException/i,
+    pattern: /DataAccessException|SQLException|JDBCConnectionException|CannotCreateTransactionException|MyBatisSystemException|PersistenceException/i,
     title: 'Database Access Error',
     description:
       '데이터베이스 연결 또는 쿼리 실행 중 오류가 발생했습니다.',
@@ -82,12 +92,12 @@ const ERROR_PATTERNS: ErrorPattern[] = [
   },
   {
     name: 'MethodArgumentNotValidException',
-    pattern: /MethodArgumentNotValidException|ConstraintViolationException/i,
+    pattern: /MethodArgumentNotValidException|ConstraintViolationException|Validation failed for argument|rejected value|Field error in object/i,
     title: 'Validation Failed',
     description:
-      '요청 데이터의 유효성 검증에 실패했습니다.',
+      '요청 데이터의 유효성 검증에 실패했습니다. 필드 값이 제약 조건(@Size, @NotNull, @Min 등)을 위반했습니다.',
     suggestion:
-      '1. DTO 클래스의 @Valid, @NotNull, @NotBlank 등의 검증 어노테이션을 확인하세요.\n2. 요청 데이터가 검증 조건을 만족하는지 확인하세요.\n3. 커스텀 Validator가 올바르게 구현되었는지 점검하세요.\n4. @ExceptionHandler를 통해 적절한 에러 응답을 반환하세요.',
+      '1. 에러 메시지에서 "Field error in object" 아래 어떤 필드가 어떤 조건을 위반했는지 확인하세요.\n2. DTO 클래스의 @Valid, @NotNull, @NotBlank, @Size 등의 검증 어노테이션을 확인하세요.\n3. 요청 데이터가 검증 조건(최소/최대 크기, 필수값 등)을 만족하는지 확인하세요.\n4. 커스텀 Validator가 올바르게 구현되었는지 점검하세요.\n5. @ExceptionHandler(MethodArgumentNotValidException.class)를 통해 적절한 에러 응답을 반환하도록 처리하세요.',
     confidence: 0.9,
   },
   {
@@ -109,6 +119,107 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     suggestion:
       '1. 스택트레이스에서 반복되는 메서드 호출 패턴을 찾으세요.\n2. 재귀의 종료 조건을 확인하세요.\n3. 엔티티 간 양방향 관계에서 toString(), hashCode() 등이 무한 재귀를 일으키지 않는지 확인하세요.\n4. @JsonIgnore 또는 @ToString.Exclude를 사용하여 순환 참조를 방지하세요.',
     confidence: 0.85,
+  },
+  // ── 추가 패턴 ──────────────────────────────────────────────────────────────
+  {
+    name: 'HttpRequestMethodNotSupportedException',
+    pattern: /HttpRequestMethodNotSupportedException|Request method .* not supported/i,
+    title: 'HTTP Method Not Supported',
+    description:
+      '요청한 HTTP 메서드(GET, POST, PUT 등)를 해당 엔드포인트에서 지원하지 않습니다.',
+    suggestion:
+      '1. 클라이언트가 올바른 HTTP 메서드를 사용하는지 확인하세요 (예: GET → POST).\n2. @GetMapping, @PostMapping 등 컨트롤러의 매핑 어노테이션을 확인하세요.\n3. Swagger/API 문서에서 해당 엔드포인트가 허용하는 메서드를 확인하세요.',
+    confidence: 0.95,
+  },
+  {
+    name: 'NoHandlerFoundException',
+    pattern: /NoHandlerFoundException|No handler found for|NoResourceFoundException/i,
+    title: '404 - Handler Not Found',
+    description:
+      '요청한 URL에 매핑된 컨트롤러 또는 정적 리소스가 없습니다.',
+    suggestion:
+      '1. 요청 URL과 컨트롤러의 @RequestMapping / @GetMapping 경로가 일치하는지 확인하세요.\n2. URL 오타 및 대소문자를 확인하세요.\n3. @RestController / @Controller 어노테이션이 누락되지 않았는지 확인하세요.\n4. Spring MVC 설정에서 `spring.mvc.throw-exception-if-no-handler-found=true`와 `spring.web.resources.add-mappings=false`를 설정하면 이 예외가 발생합니다.',
+    confidence: 0.92,
+  },
+  {
+    name: 'AccessDeniedException',
+    pattern: /AccessDeniedException|access is denied|Access Denied/i,
+    title: 'Access Denied (권한 없음)',
+    description:
+      'Spring Security에서 현재 사용자의 권한이 해당 리소스 접근에 충분하지 않습니다.',
+    suggestion:
+      '1. 현재 사용자의 Role/Authority가 @PreAuthorize, @Secured 또는 SecurityConfig의 조건을 만족하는지 확인하세요.\n2. JWT 토큰이나 세션이 올바른 권한(Role)을 포함하고 있는지 확인하세요.\n3. SecurityConfig의 `.antMatchers()` / `.requestMatchers()` 설정을 점검하세요.\n4. @EnableMethodSecurity (또는 @EnableGlobalMethodSecurity) 어노테이션이 활성화되어 있는지 확인하세요.',
+    confidence: 0.90,
+  },
+  {
+    name: 'AuthenticationException',
+    pattern: /AuthenticationException|InsufficientAuthenticationException|BadCredentialsException|UsernameNotFoundException|JwtException|ExpiredJwtException|SignatureException/i,
+    title: 'Authentication Failed (인증 실패)',
+    description:
+      '사용자 인증에 실패했습니다. 잘못된 자격증명, 만료된 토큰, 또는 서명 불일치가 원인일 수 있습니다.',
+    suggestion:
+      '1. JWT를 사용하는 경우 토큰 만료 여부(exp claim)를 확인하세요.\n2. JWT Secret Key가 서명·검증 양쪽에서 동일한지 확인하세요.\n3. UsernameNotFoundException: UserDetailsService에서 해당 사용자가 존재하는지 확인하세요.\n4. BadCredentialsException: 비밀번호 인코더(BCryptPasswordEncoder 등)가 일치하는지 확인하세요.\n5. 인증 필터(JwtAuthenticationFilter 등)의 순서와 설정을 점검하세요.',
+    confidence: 0.88,
+  },
+  {
+    name: 'TransactionRollback',
+    pattern: /TransactionSystemException|RollbackException|UnexpectedRollbackException|transaction.*rolled back|rollback.*exception/i,
+    title: 'Transaction Rollback',
+    description:
+      '트랜잭션이 예기치 않게 롤백되었습니다.',
+    suggestion:
+      '1. @Transactional 메서드 내에서 RuntimeException이 발생했는지 확인하세요.\n2. rollbackFor / noRollbackFor 설정이 의도와 맞는지 확인하세요.\n3. 중첩 트랜잭션(REQUIRES_NEW, NESTED)의 propagation 설정을 점검하세요.\n4. 체크드 예외(Checked Exception)는 기본적으로 롤백되지 않으므로 rollbackFor를 명시하세요.',
+    confidence: 0.82,
+  },
+  {
+    name: 'DuplicateKeyException',
+    pattern: /DuplicateKeyException|Duplicate entry|duplicate key value|unique constraint|ORA-00001|ERROR 1062/i,
+    title: 'Duplicate Key / Unique Constraint Violation',
+    description:
+      'DB의 PK 또는 Unique 제약 조건을 위반하는 중복 데이터를 삽입하려 했습니다.',
+    suggestion:
+      '1. INSERT 전에 중복 여부를 먼저 조회(existsBy...)하거나 upsert 쿼리를 사용하세요.\n2. 에러 메시지에서 중복된 키 값과 컬럼명을 확인하세요.\n3. JPA의 경우 merge() 대신 save()를 잘못 사용한 경우가 아닌지 확인하세요.\n4. 배치 처리 시 동시성 문제로 발생할 수 있으므로 분산 락(Distributed Lock)을 고려하세요.',
+    confidence: 0.90,
+  },
+  {
+    name: 'LazyInitializationException',
+    pattern: /LazyInitializationException|could not initialize proxy|failed to lazily initialize/i,
+    title: 'Lazy Initialization Exception (JPA)',
+    description:
+      'JPA 영속성 컨텍스트(Session)가 닫힌 후 지연 로딩(Lazy Loading) 프록시에 접근하려 했습니다.',
+    suggestion:
+      '1. @Transactional 범위 밖에서 연관 엔티티에 접근하는 코드를 확인하세요.\n2. JPQL에서 fetch join을 사용하여 필요한 연관 데이터를 즉시 로딩하세요.\n3. DTO로 변환하는 작업을 트랜잭션 내부에서 수행하세요.\n4. 필요한 경우 FetchType.EAGER로 변경하되 N+1 문제에 주의하세요.\n5. Open Session In View 패턴은 안티패턴으로 권장되지 않습니다.',
+    confidence: 0.93,
+  },
+  {
+    name: 'TimeoutException',
+    pattern: /TimeoutException|Read timed out|Connection timed out|SocketTimeoutException|ConnectTimeoutException|gateway timeout/i,
+    title: 'Timeout',
+    description:
+      '외부 API 호출, DB 쿼리, 또는 네트워크 연결이 설정된 제한 시간을 초과했습니다.',
+    suggestion:
+      '1. 슬로우 쿼리 여부를 DB의 slow query log로 확인하고 인덱스를 점검하세요.\n2. RestTemplate/WebClient의 connectTimeout, readTimeout 설정값을 확인하세요.\n3. 외부 서비스의 응답이 지연되는 경우 Circuit Breaker(Resilience4j)를 도입하세요.\n4. HikariCP의 connectionTimeout, idleTimeout 설정을 점검하세요.',
+    confidence: 0.83,
+  },
+  {
+    name: 'MissingServletRequestParameterException',
+    pattern: /MissingServletRequestParameterException|MissingPathVariableException|Required request parameter|Required URI template variable/i,
+    title: 'Required Request Parameter Missing',
+    description:
+      '필수 요청 파라미터(@RequestParam) 또는 경로 변수(@PathVariable)가 요청에 포함되지 않았습니다.',
+    suggestion:
+      '1. 에러 메시지에서 누락된 파라미터 이름을 확인하세요.\n2. 선택적 파라미터라면 @RequestParam(required = false, defaultValue = "...")을 사용하세요.\n3. 클라이언트 요청 URL/Body에 해당 파라미터가 포함되어 있는지 확인하세요.\n4. @PathVariable의 경우 URL 템플릿 경로와 변수명이 일치하는지 확인하세요.',
+    confidence: 0.92,
+  },
+  {
+    name: 'MultipartException',
+    pattern: /MultipartException|MaxUploadSizeExceededException|FileSizeLimitExceededException|multipart.*exceeded/i,
+    title: 'File Upload Size Exceeded',
+    description:
+      '업로드한 파일 또는 요청 크기가 설정된 최대값을 초과했습니다.',
+    suggestion:
+      '1. application.properties에서 업로드 크기 제한을 조정하세요:\n   - `spring.servlet.multipart.max-file-size=10MB`\n   - `spring.servlet.multipart.max-request-size=20MB`\n2. Nginx 등 리버스 프록시를 사용하는 경우 `client_max_body_size`도 함께 조정하세요.\n3. 대용량 파일은 분할 업로드(Multipart Upload) 방식을 고려하세요.',
+    confidence: 0.92,
   },
 ];
 
