@@ -9,6 +9,12 @@ import { ErrorBlock, LogLevel, LogLine } from '../types';
 const LOG_LINE_REGEX =
   /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}\.\d{3}[^\s]*)\s+(ERROR|WARN|INFO|DEBUG|TRACE)\s+(\d+)\s+---\s+(?:\[[^\]]*\]\s+)?\[([^\]]+)\]\s+([\w.$]+)\s*:\s*(.*)$/;
 
+// WARN lines that contain exception/validation/SQL keywords should be treated as errors.
+// Deliberately avoids bare "Error"/"Exception" to prevent false positives on general log messages.
+// Matches: Java class names ending in Exception/Error, Spring-specific resolver patterns, and known DB/auth keywords.
+const WARN_ERROR_PATTERN =
+  /\w+Exception\b|\w+Error\b|Resolved\s*\[|BadSqlGrammar|SQLException|MethodArgumentNotValid|ConstraintViolation|access is denied|rolled back|timed out|Duplicate entry/i;
+
 const STACK_TRACE_LINE_REGEX = /^\s+at\s+/;
 const CAUSED_BY_REGEX = /^Caused by:\s+/;
 const EXCEPTION_LINE_REGEX = /^[\w.$]+(?:Exception|Error|Throwable)/;
@@ -27,7 +33,9 @@ export class LogParser extends EventEmitter {
   }
 
   parseLine(raw: string): void {
-    const trimmed = raw.trimEnd();
+    // Some appenders (e.g. Logback's PatternLayout with %replace) encode newlines as literal "<EOL>".
+    // Normalise them back to real newlines so downstream pattern matching works correctly.
+    const trimmed = raw.trimEnd().replace(/<EOL>/g, '\n');
 
     // Empty lines: keep them if we're collecting an error block
     if (!trimmed) {
@@ -38,11 +46,17 @@ export class LogParser extends EventEmitter {
       return;
     }
 
-    const logMatch = trimmed.match(LOG_LINE_REGEX);
+    // After <EOL> expansion the string may contain real newlines.
+    // Match only against the first line so the LOG_LINE_REGEX header is always on line 0.
+    const firstLine = trimmed.split('\n')[0];
+    const logMatch = firstLine.match(LOG_LINE_REGEX);
 
     if (logMatch) {
       // New structured log line — flush any in-progress error first
       this.flushCurrentError();
+
+      // Remaining lines after the header (from <EOL> expansion) become context lines
+      const extraLines = trimmed.split('\n').slice(1);
 
       const [, timestamp, level, , thread, logger, message] = logMatch;
       const logLine: LogLine = {
@@ -57,11 +71,11 @@ export class LogParser extends EventEmitter {
 
       this.emit('log', logLine);
 
-      if (level === 'ERROR') {
+      if (level === 'ERROR' || (level === 'WARN' && WARN_ERROR_PATTERN.test(message))) {
         this.currentError = {
           id: `${this.serviceId}-err-${++this.errorCounter}`,
           timestamp,
-          level: 'ERROR',
+          level: level as LogLevel,
           logger,
           thread: thread.trim(),
           message,
@@ -70,6 +84,25 @@ export class LogParser extends EventEmitter {
         this.stackTraceBuffer = [];
         this.rawLinesBuffer = [trimmed];
         this.contextLinesBuffer = [];
+
+        // If the original line contained <EOL>-encoded newlines, treat the
+        // expanded lines as pre-collected context/stack-trace lines.
+        for (const extra of extraLines) {
+          const t = extra.trimEnd();
+          if (!t) { this.contextLinesBuffer.push(''); continue; }
+          if (
+            STACK_TRACE_LINE_REGEX.test(t) ||
+            CAUSED_BY_REGEX.test(t) ||
+            EXCEPTION_LINE_REGEX.test(t) ||
+            t.startsWith('\t') ||
+            t.startsWith('    ...')
+          ) {
+            this.stackTraceBuffer.push(t);
+          } else {
+            this.contextLinesBuffer.push(t);
+          }
+          this.rawLinesBuffer.push(t);
+        }
       }
     } else if (this.currentError) {
       // Continuation line belonging to the current error block
