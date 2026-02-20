@@ -221,6 +221,67 @@ const ERROR_PATTERNS: ErrorPattern[] = [
       '1. application.properties에서 업로드 크기 제한을 조정하세요:\n   - `spring.servlet.multipart.max-file-size=10MB`\n   - `spring.servlet.multipart.max-request-size=20MB`\n2. Nginx 등 리버스 프록시를 사용하는 경우 `client_max_body_size`도 함께 조정하세요.\n3. 대용량 파일은 분할 업로드(Multipart Upload) 방식을 고려하세요.',
     confidence: 0.92,
   },
+  // ── 신규 패턴 ──────────────────────────────────────────────────────────────
+  {
+    name: 'UnsatisfiedDependencyException',
+    pattern: /UnsatisfiedDependencyException|unsatisfied dependency expressed through|parameter \d+ of constructor in/i,
+    title: 'Unsatisfied Dependency (의존성 주입 실패)',
+    description:
+      'Spring이 Bean을 생성할 때 생성자 또는 필드에 주입할 의존성을 해결하지 못했습니다. 주로 Bean이 없거나, 타입이 일치하지 않거나, 순환 참조가 원인입니다.',
+    suggestion:
+      '1. 에러 메시지의 "parameter N of constructor in ..." 부분에서 어떤 Bean이 문제인지 확인하세요.\n2. 해당 클래스에 @Component / @Service / @Repository 등의 어노테이션이 있는지 확인하세요.\n3. 인터페이스를 주입받는 경우, 구현체가 하나인지 확인하세요 (여럿이면 @Qualifier 사용).\n4. 순환 참조라면 @Lazy를 한 쪽에 붙이거나, 설계를 재검토하세요.\n5. `spring.main.allow-circular-references=true`는 임시 방편이므로 근본 원인을 수정하세요.',
+    confidence: 0.90,
+  },
+  {
+    name: 'CircularDependencyException',
+    pattern: /The dependencies of some of the beans in the application context form a cycle|circular dependency|circular reference/i,
+    title: 'Circular Dependency (순환 참조)',
+    description:
+      'Bean A가 Bean B를 의존하고, Bean B가 다시 Bean A를 의존하는 순환 참조가 발생했습니다. Spring Boot 2.6 이상에서는 기본적으로 순환 참조를 허용하지 않습니다.',
+    suggestion:
+      '1. 에러 메시지에 표시된 순환 참조 체인(A → B → A)을 확인하세요.\n2. 의존 관계를 재설계하여 순환을 끊으세요 (예: 공통 로직을 별도 서비스로 분리).\n3. 한쪽에 @Lazy 어노테이션을 추가하면 초기화 시점을 늦춰 해결할 수 있습니다.\n4. 생성자 주입 대신 세터 주입(@Setter + @Autowired)으로 임시 해결할 수 있습니다.\n5. 임시 방편으로 spring.main.allow-circular-references=true를 설정할 수 있지만, 근본 원인 수정을 권장합니다.',
+    confidence: 0.95,
+  },
+  {
+    name: 'PropertyNotFoundException',
+    pattern: /Could not resolve placeholder|IllegalArgumentException.*\$\{|No such property|Could not bind properties|Binding to target .* failed|Failed to bind properties/i,
+    title: 'Property / Configuration Binding 실패',
+    description:
+      'application.properties (또는 yml)에 필요한 설정값이 없거나, @ConfigurationProperties 바인딩에 실패했습니다.',
+    suggestion:
+      '1. 에러 메시지에서 어떤 키가 누락됐는지 확인하세요 (예: ${my.config.key}).\n2. application.properties 또는 application.yml에 해당 키가 정의되어 있는지 확인하세요.\n3. 활성 프로파일(spring.profiles.active)에 맞는 properties 파일이 로드되고 있는지 확인하세요.\n4. @ConfigurationProperties 클래스의 필드 타입이 설정값과 호환되는지 확인하세요.\n5. 환경 변수나 시스템 프로퍼티로 값을 주입하는 경우, 해당 값이 실제로 설정되어 있는지 확인하세요.',
+    confidence: 0.88,
+  },
+  {
+    name: 'ConnectException',
+    pattern: /ConnectException|Connection refused|ECONNREFUSED|Failed to connect|Unable to connect to|connect timed out|Cannot connect to/i,
+    title: 'Connection Refused (외부 서비스 연결 실패)',
+    description:
+      '외부 서비스(데이터베이스, Redis, Kafka, 외부 API 등)에 연결할 수 없습니다. 대상 서버가 실행 중이지 않거나 네트워크/방화벽 문제일 수 있습니다.',
+    suggestion:
+      '1. 대상 서버(DB, Redis, Kafka 등)가 실행 중인지 확인하세요.\n2. application.properties의 연결 정보(host, port)가 올바른지 확인하세요.\n3. 방화벽 또는 보안 그룹 설정에서 해당 포트가 열려 있는지 확인하세요.\n4. Docker 환경이라면 컨테이너 간 네트워크 설정(docker-compose network)을 확인하세요.\n5. 연결 재시도 로직(Retry)이나 Circuit Breaker(Resilience4j)를 도입하여 장애 내성을 높이세요.',
+    confidence: 0.87,
+  },
+  {
+    name: 'EntityNotFoundException',
+    pattern: /EntityNotFoundException|javax\.persistence\.EntityNotFoundException|jakarta\.persistence\.EntityNotFoundException|No entity found for query|Unable to find .* with id/i,
+    title: 'Entity Not Found (JPA)',
+    description:
+      '요청한 ID에 해당하는 엔티티가 데이터베이스에 존재하지 않습니다.',
+    suggestion:
+      '1. 조회하는 ID 값이 실제로 DB에 존재하는지 확인하세요.\n2. findById() 대신 getById() / getReferenceById()를 사용하면 이 예외가 발생할 수 있습니다. findById()를 사용하고 Optional을 처리하세요.\n3. 삭제된 데이터를 조회하는 경우라면 soft delete 여부를 확인하세요.\n4. 테스트 데이터(Seed Data)가 초기화되어 있는지 확인하세요.\n5. @ExceptionHandler(EntityNotFoundException.class)로 적절한 404 응답을 반환하도록 처리하세요.',
+    confidence: 0.90,
+  },
+  {
+    name: 'OptimisticLockingException',
+    pattern: /OptimisticLockingFailureException|ObjectOptimisticLockingFailureException|StaleObjectStateException|OptimisticLock|Row was updated or deleted by another transaction/i,
+    title: 'Optimistic Locking 충돌',
+    description:
+      '동시에 같은 엔티티를 수정하려는 트랜잭션이 충돌하여 낙관적 잠금(Optimistic Locking) 예외가 발생했습니다. 다른 트랜잭션이 먼저 해당 행을 수정했습니다.',
+    suggestion:
+      '1. 엔티티에 @Version 필드가 올바르게 설정되어 있는지 확인하세요.\n2. 충돌 발생 시 재시도(Retry) 로직을 구현하세요 (Spring Retry의 @Retryable 활용).\n3. 충돌이 잦다면 비즈니스 로직을 재검토하거나, 필요한 경우 비관적 잠금(@Lock(LockModeType.PESSIMISTIC_WRITE))으로 전환하세요.\n4. 클라이언트에 409 Conflict 응답을 반환하여 재시도를 유도하세요.\n5. 배치 처리 시 단위를 작게 나누어 충돌 범위를 줄이세요.',
+    confidence: 0.92,
+  },
 ];
 
 export class LocalAnalyzer {

@@ -89,6 +89,23 @@ export interface RequestAiAnalysisMessage {
   error: ErrorBlock;
 }
 
+export interface KillPortMessage {
+  type: 'killPort';
+  port: number;
+  serviceId: string;
+}
+
+/** Webview → Extension: 워크스페이스 모듈 탐지 요청 */
+export interface RequestDetectModulesMessage {
+  type: 'requestDetectModules';
+}
+
+/** Webview → Extension: 선택된 모듈들을 추가 & 시작 */
+export interface AddAndStartModulesMessage {
+  type: 'addAndStartModules';
+  modulePaths: string[]; // 선택된 모듈들의 modulePath 목록
+}
+
 export type WebviewToExtensionMessage =
   | RequestServiceListMessage
   | StartServiceMessage
@@ -96,7 +113,10 @@ export type WebviewToExtensionMessage =
   | GetErrorDetailsMessage
   | WebviewReadyMessage
   | RequestAiAnalysisMessage
-  | RemoveServiceMessage;
+  | RemoveServiceMessage
+  | KillPortMessage
+  | RequestDetectModulesMessage
+  | AddAndStartModulesMessage;
 
 // ===== Extension → Webview Messages =====
 
@@ -143,10 +163,33 @@ export interface SnapshotLoad {
   activeServiceId: string;
 }
 
+export interface PortKillResult {
+  type: 'portKillResult';
+  port: number;
+  success: boolean;
+  message: string;
+}
+
+/** 탐지된 모듈 정보 (webview 표시용) */
+export interface DetectedModuleInfo {
+  name: string;
+  modulePath: string;
+  buildTool: 'gradle' | 'maven';
+  isMultiModule: boolean; // parentPath가 있으면 true
+}
+
+/** Extension → Webview: 탐지된 모듈 목록 전송 */
+export interface DetectModulesResult {
+  type: 'detectModulesResult';
+  modules: DetectedModuleInfo[];
+}
+
 export type ExtensionToWebviewMessage =
   | ServiceListUpdate
   | ServiceStatusUpdate
   | LogUpdate
   | ErrorUpdate
   | AnalysisUpdate
-  | SnapshotLoad;
+  | SnapshotLoad
+  | PortKillResult
+  | DetectModulesResult;

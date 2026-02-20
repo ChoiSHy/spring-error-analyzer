@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { exec } from 'child_process';
 import { ServiceManager } from '../services/ServiceManager';
 import {
   WebviewToExtensionMessage,
@@ -9,6 +10,7 @@ import {
   ErrorBlock,
   AnalysisResult,
   SnapshotLoad,
+  DetectedModuleInfo,
 } from '../types';
 
 export class WebviewProvider implements vscode.WebviewViewProvider {
@@ -142,7 +144,105 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
         this.serviceManager.stopService(msg.serviceId);
         this.serviceManager.removeService(msg.serviceId);
         break;
+
+      case 'killPort':
+        this.killPort(msg.port, msg.serviceId);
+        break;
+
+      case 'requestDetectModules':
+        this.detectAndSendModules();
+        break;
+
+      case 'addAndStartModules':
+        this.addAndStartModules(msg.modulePaths);
+        break;
     }
+  }
+
+  /** 워크스페이스 모듈 탐지 후 webview로 전송 */
+  private async detectAndSendModules(): Promise<void> {
+    const detected = await this.serviceManager.detectModules();
+    const modules: DetectedModuleInfo[] = detected.map((m) => ({
+      name: m.name,
+      modulePath: m.modulePath,
+      buildTool: m.buildTool,
+      isMultiModule: !!m.parentPath,
+    }));
+    this.postMessage({ type: 'detectModulesResult', modules });
+  }
+
+  /** 선택된 modulePath 목록으로 서비스 추가 & 시작 */
+  private async addAndStartModules(modulePaths: string[]): Promise<void> {
+    const detected = await this.serviceManager.detectModules();
+    const targets = detected.filter((m) => modulePaths.includes(m.modulePath));
+
+    // 대시보드 먼저 표시
+    this.show();
+
+    for (const module of targets) {
+      const service = await this.serviceManager.addService(module);
+      this.serviceManager.startService(service.id);
+    }
+  }
+
+  /** 포트를 점유한 프로세스를 강제 종료 */
+  private killPort(port: number, serviceId: string): void {
+    const isWin = process.platform === 'win32';
+
+    // 플랫폼별 PID 조회 명령
+    const findCmd = isWin
+      ? `netstat -ano | findstr ":${port} " | findstr "LISTENING"`
+      : `lsof -ti tcp:${port}`;
+
+    exec(findCmd, (err, stdout) => {
+      const pid = isWin
+        ? this.extractPidWindows(stdout)
+        : stdout.trim().split('\n')[0].trim();
+
+      if (!pid) {
+        this.postMessage({
+          type: 'portKillResult',
+          port,
+          success: false,
+          message: `포트 ${port}를 점유한 프로세스를 찾을 수 없습니다.`,
+        });
+        return;
+      }
+
+      const killCmd = isWin ? `taskkill /PID ${pid} /F` : `kill -9 ${pid}`;
+      exec(killCmd, (killErr) => {
+        if (killErr) {
+          this.postMessage({
+            type: 'portKillResult',
+            port,
+            success: false,
+            message: `포트 ${port} 프로세스(PID ${pid}) 종료 실패: ${killErr.message}`,
+          });
+        } else {
+          this.postMessage({
+            type: 'portKillResult',
+            port,
+            success: true,
+            message: `포트 ${port} 프로세스(PID ${pid})를 종료했습니다. 서비스를 다시 시작하세요.`,
+          });
+          // 해당 서비스 재시작을 위해 상태를 stopped로 전환
+          this.serviceManager.stopService(serviceId);
+        }
+      });
+    });
+  }
+
+  /** Windows netstat 출력에서 PID 추출 */
+  private extractPidWindows(stdout: string): string {
+    const lines = stdout.trim().split('\n');
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      const last = parts[parts.length - 1]?.trim();
+      if (last && /^\d+$/.test(last) && last !== '0') {
+        return last;
+      }
+    }
+    return '';
   }
 
   private getHtmlContent(webview: vscode.Webview): string {
@@ -173,13 +273,16 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
 <body>
   <div id="app">
     <header id="header">
-      <h1>Spring Boot Error Analyzer</h1>
+      <div id="header-top">
+        <h1>Spring Boot Error Analyzer</h1>
+        <button id="btn-add-service" class="btn btn-add-service" title="서비스 추가">＋ 서비스 추가</button>
+      </div>
       <div id="service-tabs"></div>
     </header>
     <main id="main">
       <div id="no-services" class="placeholder">
-        <p>서비스가 없습니다.</p>
-        <p>Command Palette에서 "Spring Error Analyzer: Start Service"를 실행하세요.</p>
+        <p>실행할 Spring Boot 서비스를 추가하세요.</p>
+        <button id="btn-add-service-empty" class="btn btn-add-service-empty">＋ 서비스 추가</button>
       </div>
       <div id="service-content" style="display:none;">
         <div id="service-info">
@@ -193,6 +296,16 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
             <div class="panel-header">
               <h2>Logs</h2>
               <button id="btn-clear-logs" class="btn btn-small">Clear</button>
+            </div>
+            <div class="log-toolbar">
+              <input id="log-search" class="log-search" type="text" placeholder="검색..." />
+              <div class="log-level-filters">
+                <button class="btn-level active" data-level="ERROR">ERROR</button>
+                <button class="btn-level active" data-level="WARN">WARN</button>
+                <button class="btn-level active" data-level="INFO">INFO</button>
+                <button class="btn-level active" data-level="DEBUG">DEBUG</button>
+              </div>
+              <span id="log-match-count" class="log-match-count"></span>
             </div>
             <div id="log-container" class="log-output"></div>
           </div>
@@ -211,6 +324,36 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
       </div>
     </main>
   </div>
+
+  <!-- 서비스 추가 모달 -->
+  <div id="add-service-modal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>서비스 추가</h2>
+        <button id="modal-close" class="modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="modal-loading" class="modal-loading">
+          <span class="modal-spinner"></span>
+          <span>모듈 탐색 중...</span>
+        </div>
+        <div id="modal-empty" class="modal-empty" style="display:none;">
+          <p>워크스페이스에서 Spring Boot 모듈을 찾을 수 없습니다.</p>
+          <p style="opacity:0.6;font-size:11px;">build.gradle 또는 pom.xml과 src/main 폴더가 있는지 확인하세요.</p>
+        </div>
+        <div id="modal-module-list" style="display:none;">
+          <p class="modal-hint">추가할 모듈을 선택하세요. (복수 선택 가능)</p>
+          <div id="module-list-container" class="module-list"></div>
+        </div>
+      </div>
+      <div class="modal-footer" id="modal-footer" style="display:none;">
+        <span id="modal-selected-count" class="modal-selected-count">0개 선택됨</span>
+        <button id="modal-cancel" class="btn btn-small">취소</button>
+        <button id="modal-confirm" class="btn btn-start" disabled>추가 및 시작</button>
+      </div>
+    </div>
+  </div>
+
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

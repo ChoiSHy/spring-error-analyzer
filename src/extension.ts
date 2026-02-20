@@ -128,6 +128,59 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem.show();
 
   context.subscriptions.push(statusBarItem);
+
+  // ── 에러 알림 & 상태바 카운터 ──────────────────────────────
+  // 서비스별 총 에러 횟수 추적 (그룹화된 건수가 아닌 raw 발생 횟수)
+  const errorCountMap = new Map<string, number>();
+
+  function updateStatusBar(): void {
+    const services = serviceManager.getServices();
+    const runningCount = services.filter(s => s.status === 'running' || s.status === 'starting').length;
+    const totalErrors = Array.from(errorCountMap.values()).reduce((a, b) => a + b, 0);
+
+    let text = '$(flame) Spring';
+    if (runningCount > 0) {
+      text += ` $(pulse) ${runningCount}`;
+    }
+    if (totalErrors > 0) {
+      text += ` $(error) ${totalErrors}`;
+      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+    } else {
+      statusBarItem.backgroundColor = undefined;
+    }
+    statusBarItem.text = text;
+    statusBarItem.tooltip = `Spring Error Analyzer\n실행 중: ${runningCount}개 서비스\n감지된 에러: ${totalErrors}건\n클릭하여 대시보드 열기`;
+  }
+
+  serviceManager.on('error-detected', (serviceId: string) => {
+    const prev = errorCountMap.get(serviceId) ?? 0;
+    errorCountMap.set(serviceId, prev + 1);
+    updateStatusBar();
+
+    // 최초 에러 또는 5회 단위마다 알림 표시 (알림 폭탄 방지)
+    const newCount = prev + 1;
+    if (newCount === 1 || newCount % 5 === 0) {
+      const svc = serviceManager.getServices().find(s => s.id === serviceId);
+      const svcName = svc?.name ?? serviceId;
+      vscode.window
+        .showWarningMessage(
+          `$(error) [${svcName}] 에러 ${newCount}건 감지됨`,
+          '대시보드 열기'
+        )
+        .then(action => {
+          if (action === '대시보드 열기') {
+            webviewProvider.show();
+          }
+        });
+    }
+  });
+
+  serviceManager.on('status-change', () => updateStatusBar());
+
+  serviceManager.on('service-removed', (serviceId: string) => {
+    errorCountMap.delete(serviceId);
+    updateStatusBar();
+  });
 }
 
 export function deactivate(): void {
