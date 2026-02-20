@@ -10,6 +10,16 @@ export function activate(context: vscode.ExtensionContext): void {
   serviceManager = new ServiceManager();
   webviewProvider = new WebviewProvider(context, serviceManager);
 
+  // 하단 패널 WebviewView 등록
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      WebviewProvider.viewId,
+      webviewProvider
+      // retainContextWhenHidden 제거 → 패널이 숨겨지면 Chromium 프로세스 해제
+      // 패널을 다시 열면 resolveWebviewView가 호출되고 extension이 상태를 재전송
+    )
+  );
+
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('springErrorAnalyzer.openDashboard', () => {

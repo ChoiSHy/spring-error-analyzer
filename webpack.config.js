@@ -43,31 +43,6 @@ const configs = [
       }),
     ],
   },
-  // Worker bundle (standalone, no vscode dependency)
-  {
-    name: 'worker',
-    target: 'node',
-    mode: 'none',
-    entry: './src/worker/analyzerWorker.ts',
-    output: {
-      path: path.resolve(__dirname, 'dist'),
-      filename: 'analyzerWorker.js',
-      libraryTarget: 'commonjs2',
-    },
-    resolve: {
-      extensions: ['.ts', '.js'],
-    },
-    module: {
-      rules: [
-        {
-          test: /\.ts$/,
-          exclude: /node_modules/,
-          use: [{ loader: 'ts-loader' }],
-        },
-      ],
-    },
-    devtool: 'nosources-source-map',
-  },
 ];
 
 module.exports = configs;

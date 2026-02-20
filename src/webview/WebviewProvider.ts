@@ -8,10 +8,13 @@ import {
   ServiceStatus,
   ErrorBlock,
   AnalysisResult,
+  SnapshotLoad,
 } from '../types';
 
-export class WebviewProvider {
-  private panel: vscode.WebviewPanel | null = null;
+export class WebviewProvider implements vscode.WebviewViewProvider {
+  public static readonly viewId = 'springErrorAnalyzer.panel';
+
+  private _view: vscode.WebviewView | null = null;
   private readonly extensionUri: vscode.Uri;
 
   constructor(
@@ -22,48 +25,63 @@ export class WebviewProvider {
     this.setupServiceManagerListeners();
   }
 
-  show(): void {
-    if (this.panel) {
-      this.panel.reveal(vscode.ViewColumn.Two);
-      return;
-    }
+  /** VSCode가 뷰를 생성/재생성할 때 자동 호출 */
+  resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ): void {
+    this._view = webviewView;
 
-    this.panel = vscode.window.createWebviewPanel(
-      'springErrorAnalyzer',
-      'Spring Error Analyzer',
-      vscode.ViewColumn.Two,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview'),
-        ],
-      }
-    );
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview'),
+      ],
+    };
 
-    this.panel.webview.html = this.getHtmlContent();
+    webviewView.webview.html = this.getHtmlContent(webviewView.webview);
 
-    this.panel.webview.onDidReceiveMessage(
+    webviewView.webview.onDidReceiveMessage(
       (msg: WebviewToExtensionMessage) => this.handleWebviewMessage(msg),
       undefined,
       this.context.subscriptions
     );
 
-    this.panel.onDidDispose(() => {
-      this.panel = null;
+    webviewView.onDidDispose(() => {
+      this._view = null;
     });
+
+  }
+
+  private sendSnapshot(): void {
+    const snapshots = this.serviceManager.getSnapshots();
+    if (snapshots.length === 0) {
+      // 서비스가 없으면 빈 목록 전송
+      this.postMessage({ type: 'serviceListUpdate', services: [] });
+      return;
+    }
+
+    const msg: SnapshotLoad = {
+      type: 'snapshotLoad',
+      snapshots,
+      activeServiceId: snapshots[0].service.id,
+    };
+    this.postMessage(msg);
+  }
+
+  /** 하단 패널의 Spring Error Analyzer 탭을 포커스 */
+  show(): void {
+    vscode.commands.executeCommand('springErrorAnalyzer.panel.focus');
   }
 
   dispose(): void {
-    if (this.panel) {
-      this.panel.dispose();
-      this.panel = null;
-    }
+    this._view = null;
   }
 
   private postMessage(msg: ExtensionToWebviewMessage): void {
-    if (this.panel) {
-      this.panel.webview.postMessage(msg);
+    if (this._view) {
+      this._view.webview.postMessage(msg);
     }
   }
 
@@ -103,10 +121,9 @@ export class WebviewProvider {
     switch (msg.type) {
       case 'webviewReady':
       case 'requestServiceList':
-        this.postMessage({
-          type: 'serviceListUpdate',
-          services: this.serviceManager.getServices(),
-        });
+        // webview가 준비됐다고 알려오면 그때 snapshot 전송
+        // → HTML 로딩 완료 후 확실히 수신됨
+        this.sendSnapshot();
         break;
 
       case 'startService':
@@ -120,16 +137,19 @@ export class WebviewProvider {
       case 'requestAiAnalysis':
         this.serviceManager.requestAiAnalysis(msg.serviceId, msg.error);
         break;
+
+      case 'removeService':
+        this.serviceManager.stopService(msg.serviceId);
+        this.serviceManager.removeService(msg.serviceId);
+        break;
     }
   }
 
-  private getHtmlContent(): string {
-    const webview = this.panel!.webview;
-
+  private getHtmlContent(webview: vscode.Webview): string {
     const distWebview = path.join(this.extensionUri.fsPath, 'dist', 'webview');
     const srcWebview = path.join(this.extensionUri.fsPath, 'src', 'webview');
 
-    // Try dist first (production), then src (development)
+    // dist 우선(production), 없으면 src(development)
     const webviewDir = fs.existsSync(distWebview) ? distWebview : srcWebview;
 
     const styleUri = webview.asWebviewUri(

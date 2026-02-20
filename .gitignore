@@ -27,3 +27,4 @@ Thumbs.db
 
 # IDE 및 편집기 설정
 .claude/
+*.vsix

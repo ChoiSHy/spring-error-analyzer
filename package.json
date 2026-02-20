@@ -2,7 +2,7 @@
   "name": "spring-boot-error-analyzer",
   "displayName": "Spring Boot Error Analyzer",
   "description": "Analyze Spring Boot error logs with local pattern matching and Claude AI",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "spring-advisor",
   "engines": {
     "vscode": "^1.85.0"
@@ -16,6 +16,15 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "views": {
+      "panel": [
+        {
+          "type": "webview",
+          "id": "springErrorAnalyzer.panel",
+          "name": "Spring Error Analyzer"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "springErrorAnalyzer.openDashboard",

@@ -53,67 +53,6 @@ export interface AnalysisResult {
   errorBlock: ErrorBlock;
 }
 
-// ===== IPC Messages: Parent → Child =====
-
-export interface StartMessage {
-  type: 'start';
-  modulePath: string;
-  parentPath?: string; // For multi-module: parent pom directory
-  moduleName?: string; // For multi-module: -pl argument
-  command: string;
-  env?: Record<string, string>;
-  serviceId: string;
-  serviceName: string;
-}
-
-export interface StopMessage {
-  type: 'stop';
-}
-
-export interface ConfigureMessage {
-  type: 'configure';
-  apiKey: string;
-  model: string;
-  maxRequestsPerMinute: number;
-}
-
-export interface AnalyzeErrorMessage {
-  type: 'analyze-error';
-  error: ErrorBlock;
-}
-
-export type ParentToChildMessage = StartMessage | StopMessage | ConfigureMessage | AnalyzeErrorMessage;
-
-// ===== IPC Messages: Child → Parent =====
-
-export interface StatusChangeMessage {
-  type: 'status-change';
-  status: ServiceStatus;
-  message?: string;
-}
-
-export interface SpringLogMessage {
-  type: 'spring-log';
-  line: string;
-  level: string;
-}
-
-export interface ErrorDetectedMessage {
-  type: 'error-detected';
-  error: ErrorBlock;
-}
-
-export interface AnalysisResultMessage {
-  type: 'analysis-result';
-  result: AnalysisResult;
-}
-
-export type ChildToParentMessage =
-  | StatusChangeMessage
-  | SpringLogMessage
-  | ErrorDetectedMessage
-  | AnalysisResultMessage
-
 // ===== Webview Messages =====
 
 export interface RequestServiceListMessage {
@@ -135,6 +74,11 @@ export interface GetErrorDetailsMessage {
   errorId: string;
 }
 
+export interface RemoveServiceMessage {
+  type: 'removeService';
+  serviceId: string;
+}
+
 export interface WebviewReadyMessage {
   type: 'webviewReady';
 }
@@ -151,7 +95,8 @@ export type WebviewToExtensionMessage =
   | StopServiceMessage
   | GetErrorDetailsMessage
   | WebviewReadyMessage
-  | RequestAiAnalysisMessage;
+  | RequestAiAnalysisMessage
+  | RemoveServiceMessage;
 
 // ===== Extension → Webview Messages =====
 
@@ -184,9 +129,24 @@ export interface AnalysisUpdate {
   result: AnalysisResult;
 }
 
+// 패널이 재생성될 때 extension → webview 전체 상태 일괄 전송
+export interface ServiceSnapshot {
+  service: ServiceInfo;
+  logs: Array<{ line: string; level: string }>;
+  errors: ErrorBlock[];
+  analyses: AnalysisResult[];
+}
+
+export interface SnapshotLoad {
+  type: 'snapshotLoad';
+  snapshots: ServiceSnapshot[];
+  activeServiceId: string;
+}
+
 export type ExtensionToWebviewMessage =
   | ServiceListUpdate
   | ServiceStatusUpdate
   | LogUpdate
   | ErrorUpdate
-  | AnalysisUpdate;
+  | AnalysisUpdate
+  | SnapshotLoad;

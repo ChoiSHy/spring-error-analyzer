@@ -87,6 +87,10 @@
       case 'analysisUpdate':
         storeAnalysis(msg.result);
         break;
+
+      case 'snapshotLoad':
+        loadSnapshot(msg.snapshots, msg.activeServiceId);
+        break;
     }
   });
 
@@ -104,18 +108,73 @@
     if (serviceContent) serviceContent.style.display = 'block';
 
     services.forEach((svc) => {
-      const tab = document.createElement('button');
+      const tab = document.createElement('div');
       tab.className = `service-tab ${svc.id === activeServiceId ? 'active' : ''}`;
-      tab.innerHTML = `<span class="tab-status ${svc.status}"></span>${svc.name}`;
-      tab.addEventListener('click', () => selectService(svc.id));
+
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.innerHTML = `<span class="tab-status ${svc.status}"></span>${svc.name}`;
+      label.addEventListener('click', () => selectService(svc.id));
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'tab-close';
+      closeBtn.title = '서비스 제거';
+      closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeService(svc.id);
+      });
+
+      tab.appendChild(label);
+      tab.appendChild(closeBtn);
       serviceTabs.appendChild(tab);
     });
+  }
+
+  /**
+   * 패널 재생성 시 extension으로부터 전체 상태를 한 번에 복원
+   * logsMap / errorsMap / analysisMap 을 초기화하고 재구성
+   */
+  function loadSnapshot(snapshots, activeId) {
+    // 기존 로컬 캐시 초기화
+    logsMap.clear();
+    errorsMap.clear();
+    analysisMap.clear();
+
+    // 서비스 목록 재구성
+    services = snapshots.map((s) => s.service);
+    activeServiceId = activeId || (services.length > 0 ? services[0].id : '');
+
+    // 각 서비스의 로그 / 에러 / 분석 결과 복원
+    snapshots.forEach((snap) => {
+      logsMap.set(snap.service.id, snap.logs || []);
+      errorsMap.set(snap.service.id, snap.errors || []);
+      (snap.analyses || []).forEach((a) => analysisMap.set(a.errorId, a));
+    });
+
+    renderTabs();
+    updateServiceView();
   }
 
   function selectService(id) {
     activeServiceId = id;
     renderTabs();
     updateServiceView();
+  }
+
+  function removeService(id) {
+    // 로컬 캐시 정리
+    logsMap.delete(id);
+    errorsMap.delete(id);
+
+    // 활성 탭이 제거된 경우 다른 탭으로 전환
+    if (activeServiceId === id) {
+      const remaining = services.filter((s) => s.id !== id);
+      activeServiceId = remaining.length > 0 ? remaining[0].id : '';
+    }
+
+    // extension에 제거 요청
+    vscode.postMessage({ type: 'removeService', serviceId: id });
   }
 
   function updateServiceView() {

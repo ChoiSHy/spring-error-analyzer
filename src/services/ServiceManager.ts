@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { EventEmitter } from 'events';
 import { SpringBootService } from './SpringBootService';
-import { ServiceInfo, AnalysisResult, ErrorBlock } from '../types';
+import { ServiceInfo, AnalysisResult, ErrorBlock, ServiceSnapshot } from '../types';
 
 export interface DetectedModule {
   name: string;
@@ -26,6 +26,16 @@ export class ServiceManager extends EventEmitter {
 
   getService(id: string): SpringBootService | undefined {
     return this.services.get(id);
+  }
+
+  /** 모든 서비스의 현재 상태 스냅샷 반환 (webview 재생성 시 사용) */
+  getSnapshots(): ServiceSnapshot[] {
+    return Array.from(this.services.values()).map((s) => ({
+      service: s.getInfo(),
+      logs: s.logs,
+      errors: s.errors,
+      analyses: s.analyses,
+    }));
   }
 
   async detectModules(): Promise<DetectedModule[]> {
