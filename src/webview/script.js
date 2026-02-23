@@ -752,8 +752,9 @@
       </div>
       <div class="analysis-section">
         <h3>Solution</h3>
-        <pre>${escapeHtml(analysis.suggestion)}</pre>
+        <div class="suggestion-body">${renderInlineMarkdown(analysis.suggestion)}</div>
       </div>
+      ${renderCodeContexts(analysis.codeContexts)}
       <div class="analysis-section">
         <h3>Confidence: ${Math.round(analysis.confidence * 100)}%</h3>
         <div class="confidence-bar">
@@ -859,6 +860,199 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+
+  /**
+   * Java/Kotlin/Spring 코드처럼 보이는 줄인지 휴리스틱으로 판단한다.
+   * Claude가 backtick 없이 코드를 반환할 때 자동 감지에 사용.
+   */
+  function isCodeLine(line) {
+    const t = line.trim();
+    if (!t) return false;
+    // 들여쓰기된 줄 (공백/탭으로 시작)
+    if (/^\s+\S/.test(line)) return true;
+    // Java/Kotlin 키워드로 시작
+    if (/^(if\s*\(|else[\s{]|for\s*\(|while\s*\(|return[\s;(]|throw\s|try[\s{]|catch\s*\(|finally[\s{]|new\s+[A-Z]|import\s|package\s|public\s|private\s|protected\s|static\s|final\s|void\s|@[A-Za-z])/.test(t)) return true;
+    // 중괄호만 있는 줄
+    if (/^[{}]+$/.test(t)) return true;
+    // 세미콜론으로 끝나는 줄
+    if (t.endsWith(';')) return true;
+    // 대문자 시작 타입 선언: Authentication auth = ...
+    if (/^[A-Z]\w*[\w<>, \[\]]*\s+\w+\s*[=;(]/.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * 텍스트에서 코드 블록을 감지하여 강조 HTML로 변환한다.
+   * 우선순위:
+   *   1) 명시적 ```...``` 백틱 블록
+   *   2) Java/Kotlin 코드 패턴 자동 감지 (Claude가 backtick 없이 반환할 때)
+   *   3) `인라인 코드` 백틱
+   */
+  function renderInlineMarkdown(text) {
+    if (!text) return '';
+
+    const lines = text.split('\n');
+    const parts = [];
+    let codeBuffer = [];
+    let textBuffer = [];
+    let inTripleBacktick = false;
+
+    function flushText() {
+      if (textBuffer.length === 0) return;
+      while (textBuffer.length && !textBuffer[0].trim()) textBuffer.shift();
+      while (textBuffer.length && !textBuffer[textBuffer.length - 1].trim()) textBuffer.pop();
+      if (textBuffer.length === 0) { textBuffer = []; return; }
+      const html = textBuffer.map((line) => {
+        if (!line.trim()) return '<br>';
+        return escapeHtml(line).replace(
+          /`([^`\n]+)`/g,
+          (_, c) => `<code class="inline-code">${c}</code>`
+        );
+      }).join('<br>');
+      parts.push(`<p class="suggestion-text">${html}</p>`);
+      textBuffer = [];
+    }
+
+    function flushCode() {
+      if (codeBuffer.length === 0) return;
+      while (codeBuffer.length && !codeBuffer[0].trim()) codeBuffer.shift();
+      while (codeBuffer.length && !codeBuffer[codeBuffer.length - 1].trim()) codeBuffer.pop();
+      if (codeBuffer.length === 0) { codeBuffer = []; return; }
+      parts.push(`<pre class="suggestion-code-block">${escapeHtml(codeBuffer.join('\n'))}</pre>`);
+      codeBuffer = [];
+    }
+
+    for (const line of lines) {
+      // 명시적 ``` 블록
+      if (line.trim().startsWith('```')) {
+        if (!inTripleBacktick) {
+          flushText();
+          inTripleBacktick = true;
+        } else {
+          inTripleBacktick = false;
+          flushCode();
+        }
+        continue;
+      }
+      if (inTripleBacktick) {
+        codeBuffer.push(line);
+        continue;
+      }
+      // 코드 패턴 자동 감지
+      if (isCodeLine(line)) {
+        if (textBuffer.length > 0) flushText();
+        codeBuffer.push(line);
+      } else {
+        if (codeBuffer.length > 0) flushCode();
+        textBuffer.push(line);
+      }
+    }
+
+    flushText();
+    flushCode();
+    return parts.join('');
+  }
+
+  /**
+   * CodeContextExtractor가 생성한 코드 스니펫을 HTML 테이블로 렌더링한다.
+   * '>>>' 마커가 붙은 라인(에러 발생 라인)을 빨간 배경으로 강조한다.
+   *
+   * @param {string} snippet  '>>>  0042 | code...' 형식의 문자열
+   */
+  function renderCodeSnippet(snippet) {
+    if (!snippet) return '';
+    const lines = snippet.split('\n');
+    const rows = lines.map((line) => {
+      const isError = line.startsWith('>>>');
+      // 포맷: ">>>  0042 | actual code" 또는 "    0042 | actual code"
+      const match = line.match(/^(>>>|   )\s+(\d+)\s\|\s?(.*)/);
+      if (!match) {
+        // 파싱 실패 시 그대로 출력
+        return `<tr class="${isError ? 'code-error-line' : ''}">
+          <td class="code-line-num"></td>
+          <td class="code-line-body">${escapeHtml(line)}</td>
+        </tr>`;
+      }
+      const [, , lineNum, code] = match;
+      return `<tr class="${isError ? 'code-error-line' : ''}">
+        <td class="code-line-num">${escapeHtml(lineNum)}</td>
+        <td class="code-line-body">${escapeHtml(code)}</td>
+      </tr>`;
+    });
+    return `<table class="code-snippet-table">${rows.join('')}</table>`;
+  }
+
+  /**
+   * codeContexts 배열을 HTML 섹션으로 렌더링한다.
+   * @param {Array<{className: string, methodName: string, fileName: string, lineNumber: number, codeSnippet: string}>} contexts
+   */
+  function renderCodeContexts(contexts) {
+    if (!contexts || contexts.length === 0) return '';
+    const parts = contexts.map((ctx) => {
+      const label = `${escapeHtml(ctx.className)}.${escapeHtml(ctx.methodName)}()`;
+      const fileRef = `${escapeHtml(ctx.fileName)}:${ctx.lineNumber}`;
+      return `
+        <div class="code-context-item">
+          <div class="code-context-label">
+            <span class="code-context-method">${label}</span>
+            <span class="code-context-file">${fileRef}</span>
+          </div>
+          ${renderCodeSnippet(ctx.codeSnippet)}
+        </div>
+      `;
+    });
+    return `
+      <div class="analysis-section">
+        <h3>소스 코드</h3>
+        ${parts.join('')}
+      </div>
+    `;
+  }
+
+  // ── 로그 패널 너비 리사이즈 ─────────────────────────────────
+
+  (function () {
+    const resizer  = document.getElementById('log-resizer');
+    const logPanel = document.getElementById('log-panel');
+    const panelsEl = document.getElementById('panels');
+    if (!resizer || !logPanel || !panelsEl) { return; }
+
+    let isResizing  = false;
+    let startX      = 0;
+    let startWidth  = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX     = e.clientX;
+      startWidth = logPanel.getBoundingClientRect().width;
+      resizer.classList.add('resizing');
+      document.body.style.cursor     = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) { return; }
+      const dx        = e.clientX - startX;
+      const newWidth  = startWidth + dx;
+      const maxWidth  = panelsEl.getBoundingClientRect().width * 0.70;
+      const clamped   = Math.max(150, Math.min(newWidth, maxWidth));
+      logPanel.style.flex = `0 0 ${clamped}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) { return; }
+      isResizing = false;
+      resizer.classList.remove('resizing');
+      document.body.style.cursor     = '';
+      document.body.style.userSelect = '';
+    });
+
+    // 더블클릭 시 초기 너비로 리셋
+    resizer.addEventListener('dblclick', () => {
+      logPanel.style.flex = '1 1 0';
+    });
+  })();
 
   // webview 준비 완료 알림
   vscode.postMessage({ type: 'webviewReady' });

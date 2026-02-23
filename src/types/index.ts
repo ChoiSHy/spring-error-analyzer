@@ -41,6 +41,15 @@ export interface ErrorBlock {
 
 export type AnalysisType = 'local' | 'ai';
 
+/** 스택 프레임에서 추출한 소스 코드 컨텍스트 (webview 표시용) */
+export interface CodeContext {
+  className: string;
+  methodName: string;
+  fileName: string;
+  lineNumber: number;
+  codeSnippet: string; // '>>> lineNum | code' 형식의 포맷된 문자열
+}
+
 export interface AnalysisResult {
   errorId: string;
   serviceId: string;
@@ -51,6 +60,7 @@ export interface AnalysisResult {
   confidence: number; // 0.0 ~ 1.0
   timestamp: string;
   errorBlock: ErrorBlock;
+  codeContexts?: CodeContext[]; // 에러 위치 소스 코드 (AI 분석 시만 포함)
 }
 
 // ===== Webview Messages =====

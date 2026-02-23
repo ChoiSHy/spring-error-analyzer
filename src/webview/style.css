@@ -238,17 +238,63 @@ body {
 /* Panels layout */
 #panels {
   display: flex;
-  gap: 12px;
+  gap: 0;
   height: calc(100vh - 140px);
 }
 
 .panel {
-  flex: 1;
   border: 1px solid var(--border);
   border-radius: 4px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 140px;
+}
+
+/* 로그 패널: 기본적으로 남은 공간을 모두 차지 */
+#log-panel {
+  flex: 1 1 0;
+  margin-right: 4px;
+}
+
+/* 에러 패널: 고정 너비로 시작, 좁게 */
+#error-panel {
+  flex: 0 0 210px;
+  margin-left: 4px;
+  margin-right: 12px;
+}
+
+/* 분석 패널: 남은 공간 차지 */
+#analysis-panel {
+  flex: 1 1 0;
+  margin-left: 0;
+}
+
+/* ── 패널 리사이저 ─────────────────────────────────────────── */
+.panel-resizer {
+  flex: 0 0 4px;
+  background: var(--border);
+  border-radius: 2px;
+  cursor: col-resize;
+  transition: background 0.15s, flex-basis 0.1s;
+  position: relative;
+  align-self: stretch;
+}
+
+.panel-resizer:hover,
+.panel-resizer.resizing {
+  flex-basis: 4px;
+  background: var(--btn-bg, #0e639c);
+}
+
+/* 리사이저 hover 영역 확장 (투명 패딩) */
+.panel-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  right: -5px;
 }
 
 .panel-header {
@@ -908,6 +954,122 @@ body {
 /* CSP-safe hidden class: replaces inline style="display:none" */
 .hidden {
   display: none !important;
+}
+
+/* ── 코드 강조 스타일 ──────────────────────────────────────── */
+
+/* Solution 텍스트 컨테이너 */
+.suggestion-body {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* suggestion 내 텍스트 단락 */
+.suggestion-text {
+  margin: 4px 0;
+}
+
+.suggestion-body > p + pre,
+.suggestion-body > pre + p {
+  margin-top: 6px;
+}
+
+/* suggestion 안의 트리플 백틱 코드 블록 */
+.suggestion-code-block {
+  background: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 6px 0;
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* 인라인 백틱 코드 */
+.inline-code {
+  background: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.3));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  font-size: 11px;
+  color: var(--vscode-textPreformat-foreground, #ce9178);
+}
+
+/* 소스 코드 컨텍스트 섹션 */
+.code-context-item {
+  margin-bottom: 12px;
+}
+
+.code-context-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.code-context-method {
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-symbolIcon-methodForeground, #dcdcaa);
+}
+
+.code-context-file {
+  font-size: 10px;
+  opacity: 0.55;
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+}
+
+/* 코드 스니펫 테이블 */
+.code-snippet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  background: var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* 라인 번호 칸 */
+.code-line-num {
+  width: 40px;
+  min-width: 40px;
+  text-align: right;
+  padding: 1px 8px 1px 4px;
+  color: var(--vscode-editorLineNumber-foreground, #858585);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  vertical-align: top;
+}
+
+/* 코드 내용 칸 */
+.code-line-body {
+  padding: 1px 8px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* 에러 발생 라인 강조 */
+.code-error-line {
+  background: rgba(244, 67, 54, 0.18);
+}
+
+.code-error-line .code-line-num {
+  color: #f44336;
+  font-weight: 700;
+  border-right-color: #f44336;
+}
+
+.code-error-line .code-line-body {
+  color: #ffcdd2;
 }
 
 /* Modal empty sub-hint */

@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { LogParser } from '../analyzer/LogParser';
 import { LocalAnalyzer } from '../analyzer/LocalAnalyzer';
 import { ClaudeAnalyzer } from '../analyzer/ClaudeAnalyzer';
+import { CodeContextExtractor } from '../analyzer/CodeContextExtractor';
 import {
   ServiceInfo,
   ServiceStatus,
@@ -61,6 +62,7 @@ export class SpringBootService extends EventEmitter {
   private readlineInterfaces: readline.Interface[] = [];
   private readonly localAnalyzer = new LocalAnalyzer();
   private readonly claudeAnalyzer = new ClaudeAnalyzer();
+  private readonly codeContextExtractor: CodeContextExtractor;
 
   private _status: ServiceStatus = 'idle';
   private _errors: ErrorBlock[] = [];
@@ -76,6 +78,10 @@ export class SpringBootService extends EventEmitter {
     public readonly moduleName?: string
   ) {
     super();
+    // 소스 코드 탐색 경로: modulePath + 워크스페이스 폴더 전체
+    const workspacePaths = vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [];
+    const searchPaths = [this.modulePath, ...workspacePaths.filter((p) => p !== this.modulePath)];
+    this.codeContextExtractor = new CodeContextExtractor(searchPaths);
   }
 
   get status(): ServiceStatus { return this._status; }
@@ -233,7 +239,8 @@ export class SpringBootService extends EventEmitter {
       this.emit('analysis-result', result);
       return;
     }
-    const result = await this.claudeAnalyzer.analyze(error);
+    const codeContexts = this.codeContextExtractor.extract(error.stackTrace);
+    const result = await this.claudeAnalyzer.analyze(error, codeContexts);
     if (result) {
       this._analyses.push(result);
       this.emit('analysis-result', result);

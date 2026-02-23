@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { AnalysisResult, ErrorBlock } from '../types';
+import { AnalysisResult, ErrorBlock, CodeContext } from '../types';
+import { StackFrameContext } from './CodeContextExtractor';
 
 export class ClaudeAnalyzer {
   private client: Anthropic | null = null;
@@ -30,7 +31,7 @@ export class ClaudeAnalyzer {
     this.requestTimestamps.push(Date.now());
   }
 
-  async analyze(error: ErrorBlock): Promise<AnalysisResult | null> {
+  async analyze(error: ErrorBlock, codeContexts?: StackFrameContext[]): Promise<AnalysisResult | null> {
     if (!this.client) {
       return null;
     }
@@ -57,16 +58,28 @@ export class ClaudeAnalyzer {
           ? '\n\nStack Trace:\n' + error.stackTrace.slice(0, 50).join('\n')
           : '';
 
+      // 소스 코드 컨텍스트 섹션 구성
+      let codeContextSection = '';
+      if (codeContexts && codeContexts.length > 0) {
+        codeContextSection = '\n\n관련 소스 코드 (에러 발생 위치, >>> 마커가 해당 라인):';
+        for (const ctx of codeContexts) {
+          codeContextSection +=
+            `\n\n[${ctx.className}.${ctx.methodName}() ` +
+            `- ${ctx.fileName}:${ctx.lineNumber}]\n` +
+            '```\n' + ctx.codeSnippet + '\n```';
+        }
+      }
+
       const prompt = `You are a Spring Boot error analysis expert. Analyze the following error and provide:
 1. A concise title for this error (in Korean)
 2. A clear description of what went wrong (in Korean)
-3. Step-by-step suggestions to fix it (in Korean)
+3. Step-by-step suggestions to fix it (in Korean) — if source code is provided, reference specific line numbers or variable names
 4. Confidence level (0.0 to 1.0) based on how certain you are about the analysis
 
 Error Message: ${error.message}
 Logger: ${error.logger}
 Thread: ${error.thread}
-Timestamp: ${error.timestamp}${stackTraceText}
+Timestamp: ${error.timestamp}${stackTraceText}${codeContextSection}
 
 Respond ONLY in the following JSON format (no markdown, no code blocks):
 {"title": "...", "description": "...", "suggestion": "...", "confidence": 0.0}`;
@@ -91,6 +104,13 @@ Respond ONLY in the following JSON format (no markdown, no code blocks):
 
       const parsed = JSON.parse(jsonText);
 
+      // StackFrameContext → CodeContext (filePath 제외, webview 전송용)
+      const mappedContexts: CodeContext[] | undefined = codeContexts && codeContexts.length > 0
+        ? codeContexts.map(({ className, methodName, fileName, lineNumber, codeSnippet }) => ({
+            className, methodName, fileName, lineNumber, codeSnippet,
+          }))
+        : undefined;
+
       return {
         errorId: error.id,
         serviceId: error.serviceId,
@@ -101,6 +121,7 @@ Respond ONLY in the following JSON format (no markdown, no code blocks):
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.7,
         timestamp: new Date().toISOString(),
         errorBlock: error,
+        codeContexts: mappedContexts,
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);

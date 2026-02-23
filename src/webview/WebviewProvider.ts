@@ -306,6 +306,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
             </div>
             <div id="log-container" class="log-output"></div>
           </div>
+          <div id="log-resizer" class="panel-resizer" title="드래그하여 너비 조절 · 더블클릭하여 초기화"></div>
           <div id="error-panel" class="panel">
             <h2>Errors <span id="error-count" class="badge badge-error">0</span></h2>
             <div id="error-list"></div>
