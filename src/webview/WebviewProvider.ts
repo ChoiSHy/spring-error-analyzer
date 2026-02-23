@@ -58,16 +58,12 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
 
   private sendSnapshot(): void {
     const snapshots = this.serviceManager.getSnapshots();
-    if (snapshots.length === 0) {
-      // 서비스가 없으면 빈 목록 전송
-      this.postMessage({ type: 'serviceListUpdate', services: [] });
-      return;
-    }
-
+    // 서비스 유무에 관계없이 항상 snapshotLoad로 전송
+    // → webview가 항상 동일한 경로로 상태를 복원하므로 "빈 목록 덮어쓰기" 버그 없음
     const msg: SnapshotLoad = {
       type: 'snapshotLoad',
       snapshots,
-      activeServiceId: snapshots[0].service.id,
+      activeServiceId: snapshots.length > 0 ? snapshots[0].service.id : '',
     };
     this.postMessage(msg);
   }
@@ -161,14 +157,15 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
 
   /** 워크스페이스 모듈 탐지 후 webview로 전송 */
   private async detectAndSendModules(): Promise<void> {
-    const detected = await this.serviceManager.detectModules();
+    const { modules: detected, log } = await this.serviceManager.detectModulesWithLog();
     const modules: DetectedModuleInfo[] = detected.map((m) => ({
       name: m.name,
       modulePath: m.modulePath,
       buildTool: m.buildTool,
       isMultiModule: !!m.parentPath,
     }));
-    this.postMessage({ type: 'detectModulesResult', modules });
+
+    this.postMessage({ type: 'detectModulesResult', modules, workspaceInfo: log.join('\n') });
   }
 
   /** 선택된 modulePath 목록으로 서비스 추가 & 시작 */
@@ -284,7 +281,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
         <p>실행할 Spring Boot 서비스를 추가하세요.</p>
         <button id="btn-add-service-empty" class="btn btn-add-service-empty">＋ 서비스 추가</button>
       </div>
-      <div id="service-content" style="display:none;">
+      <div id="service-content" class="hidden">
         <div id="service-info">
           <span id="service-name"></span>
           <span id="service-status" class="badge"></span>
@@ -313,7 +310,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
             <h2>Errors <span id="error-count" class="badge badge-error">0</span></h2>
             <div id="error-list"></div>
           </div>
-          <div id="analysis-panel" class="panel" style="display:none;">
+          <div id="analysis-panel" class="panel hidden">
             <div id="analysis-header">
               <h2>Analysis</h2>
               <button id="btn-close-analysis" class="btn btn-small">Close</button>
@@ -326,7 +323,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
   </div>
 
   <!-- 서비스 추가 모달 -->
-  <div id="add-service-modal" class="modal-overlay" style="display:none;">
+  <div id="add-service-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
         <h2>서비스 추가</h2>
@@ -337,16 +334,16 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
           <span class="modal-spinner"></span>
           <span>모듈 탐색 중...</span>
         </div>
-        <div id="modal-empty" class="modal-empty" style="display:none;">
+        <div id="modal-empty" class="modal-empty hidden">
           <p>워크스페이스에서 Spring Boot 모듈을 찾을 수 없습니다.</p>
-          <p style="opacity:0.6;font-size:11px;">build.gradle 또는 pom.xml과 src/main 폴더가 있는지 확인하세요.</p>
+          <p class="modal-empty-hint">build.gradle 또는 pom.xml과 src/main 폴더가 있는지 확인하세요.</p>
         </div>
-        <div id="modal-module-list" style="display:none;">
+        <div id="modal-module-list" class="hidden">
           <p class="modal-hint">추가할 모듈을 선택하세요. (복수 선택 가능)</p>
           <div id="module-list-container" class="module-list"></div>
         </div>
       </div>
-      <div class="modal-footer" id="modal-footer" style="display:none;">
+      <div class="modal-footer hidden" id="modal-footer">
         <span id="modal-selected-count" class="modal-selected-count">0개 선택됨</span>
         <button id="modal-cancel" class="btn btn-small">취소</button>
         <button id="modal-confirm" class="btn btn-start" disabled>추가 및 시작</button>

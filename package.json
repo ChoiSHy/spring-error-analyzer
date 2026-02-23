@@ -2,7 +2,7 @@
   "name": "spring-boot-error-analyzer",
   "displayName": "Spring Boot Error Analyzer",
   "description": "Analyze Spring Boot error logs with local pattern matching and Claude AI",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "spring-advisor",
   "engines": {
     "vscode": "^1.85.0"
@@ -80,6 +80,21 @@
           "type": "string",
           "default": "",
           "description": "Additional JVM arguments for Spring Boot"
+        },
+        "springErrorAnalyzer.useJdt": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "redhat.java 확장이 설치·활성화된 경우 JDT 방식으로 실행, 없으면 bootRun으로 폴백",
+            "항상 JDT 방식으로 실행 (redhat.java 필수)",
+            "항상 bootRun/spring-boot:run 방식으로 실행"
+          ],
+          "default": "auto",
+          "description": "Spring Boot 실행 방식: JDT(빠름, redhat.java 필요) 또는 bootRun(범용)"
         }
       }
     }

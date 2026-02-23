@@ -182,6 +182,7 @@ export interface DetectedModuleInfo {
 export interface DetectModulesResult {
   type: 'detectModulesResult';
   modules: DetectedModuleInfo[];
+  workspaceInfo?: string;
 }
 
 export type ExtensionToWebviewMessage =

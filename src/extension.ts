@@ -33,9 +33,18 @@ export function activate(context: vscode.ExtensionContext): void {
       const modules = await serviceManager.detectModules();
 
       if (modules.length === 0) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        const folderInfo = workspaceFolders
+          ? workspaceFolders.map(f => f.uri.fsPath).join(', ')
+          : '(없음)';
         vscode.window.showWarningMessage(
-          'Spring Boot 모듈을 찾을 수 없습니다. 워크스페이스에 build.gradle 또는 pom.xml이 있는지 확인하세요.'
-        );
+          `Spring Boot 모듈을 찾을 수 없습니다. 워크스페이스: ${folderInfo}`,
+          '서비스 추가 패널 열기'
+        ).then(action => {
+          if (action === '서비스 추가 패널 열기') {
+            webviewProvider.show();
+          }
+        });
         return;
       }
 

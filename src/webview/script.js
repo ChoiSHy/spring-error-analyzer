@@ -83,7 +83,7 @@
   });
 
   btnCloseAnalysis?.addEventListener('click', () => {
-    if (analysisPanel) analysisPanel.style.display = 'none';
+    if (analysisPanel) analysisPanel.classList.add('hidden');
   });
 
   // ── 서비스 추가 모달 ─────────────────────────────────────────
@@ -92,18 +92,34 @@
     if (!addServiceModal) return;
     selectedModulePaths.clear();
     updateModalConfirmButton();
-    // 로딩 상태로 초기화
-    if (modalLoading)    modalLoading.style.display    = 'flex';
-    if (modalEmpty)      modalEmpty.style.display      = 'none';
-    if (modalModuleList) modalModuleList.style.display = 'none';
-    if (modalFooter)     modalFooter.style.display     = 'none';
-    addServiceModal.style.display = 'flex';
+
+    // 모든 상태 완전 초기화 (이전 탐색 결과 잔재 제거)
+    if (modalLoading) {
+      modalLoading.classList.remove('hidden');
+    }
+    if (modalEmpty) {
+      modalEmpty.classList.add('hidden');
+      // 이전 탐색 로그 제거
+      const oldLog = modalEmpty.querySelector('.detect-log');
+      if (oldLog) oldLog.remove();
+    }
+    if (modalModuleList) {
+      modalModuleList.classList.add('hidden');
+    }
+    if (moduleListContainer) {
+      moduleListContainer.innerHTML = '';
+    }
+    if (modalFooter) {
+      modalFooter.classList.add('hidden');
+    }
+
+    addServiceModal.classList.remove('hidden');
     // extension에 모듈 탐지 요청
     vscode.postMessage({ type: 'requestDetectModules' });
   }
 
   function closeAddServiceModal() {
-    if (addServiceModal) addServiceModal.style.display = 'none';
+    if (addServiceModal) addServiceModal.classList.add('hidden');
   }
 
   function updateModalConfirmButton() {
@@ -164,12 +180,20 @@
     const msg = event.data;
     switch (msg.type) {
       case 'serviceListUpdate':
+        // service-added / service-removed 이벤트용: 빈 배열이 오더라도
+        // snapshotLoad와 달리 로그/에러 상태는 유지하고 탭만 갱신
         services = msg.services;
         renderTabs();
-        if (!activeServiceId && services.length > 0) {
-          selectService(services[0].id);
+        if (services.length > 0) {
+          if (!activeServiceId || !services.find((s) => s.id === activeServiceId)) {
+            selectService(services[0].id);
+          } else {
+            updateServiceView();
+          }
+        } else {
+          activeServiceId = '';
+          updateServiceView();
         }
-        updateServiceView();
         break;
 
       case 'serviceStatusUpdate':
@@ -197,7 +221,7 @@
         break;
 
       case 'detectModulesResult':
-        renderModalModules(msg.modules);
+        renderModalModules(msg.modules, msg.workspaceInfo);
         break;
     }
   });
@@ -209,13 +233,13 @@
     serviceTabs.innerHTML = '';
 
     if (services.length === 0) {
-      if (noServices) noServices.style.display = 'flex';
-      if (serviceContent) serviceContent.style.display = 'none';
+      if (noServices) noServices.classList.remove('hidden');
+      if (serviceContent) serviceContent.classList.add('hidden');
       return;
     }
 
-    if (noServices) noServices.style.display = 'none';
-    if (serviceContent) serviceContent.style.display = 'block';
+    if (noServices) noServices.classList.add('hidden');
+    if (serviceContent) serviceContent.classList.remove('hidden');
 
     services.forEach((svc) => {
       const tab = document.createElement('div');
@@ -487,7 +511,7 @@
       }
     }
     if (analysisPanel && analysisPanel.dataset.groupKey === key) {
-      analysisPanel.style.display = 'none';
+      analysisPanel.classList.add('hidden');
     }
     renderErrors();
     renderTabs();
@@ -499,7 +523,7 @@
       if (g.representativeError) analysisMap.delete(g.representativeError.id);
     });
     errorGroupsMap.set(serviceId, []);
-    if (analysisPanel) analysisPanel.style.display = 'none';
+    if (analysisPanel) analysisPanel.classList.add('hidden');
     renderErrors();
     renderTabs();
   }
@@ -675,7 +699,7 @@
     const analysis = analysisMap.get(errorId);
     if (!analysisPanel || !analysisContent) return;
 
-    analysisPanel.style.display = 'flex';
+    analysisPanel.classList.remove('hidden');
     analysisPanel.dataset.errorId = errorId;
 
     // 포트 충돌 감지
@@ -752,21 +776,29 @@
   /**
    * @param {Array<{name: string, modulePath: string, buildTool: string, isMultiModule: boolean}>} modules
    */
-  function renderModalModules(modules) {
+  function renderModalModules(modules, workspaceInfo) {
     if (!modalLoading || !modalEmpty || !modalModuleList || !moduleListContainer || !modalFooter) return;
 
-    modalLoading.style.display = 'none';
+    modalLoading.classList.add('hidden');
 
     if (modules.length === 0) {
-      modalEmpty.style.display = 'flex';
-      modalModuleList.style.display = 'none';
-      modalFooter.style.display = 'none';
+      modalEmpty.classList.remove('hidden');
+      modalModuleList.classList.add('hidden');
+      modalFooter.classList.add('hidden');
+      // 탐색 로그 표시
+      let logEl = modalEmpty.querySelector('.detect-log');
+      if (!logEl) {
+        logEl = document.createElement('pre');
+        logEl.className = 'detect-log';
+        modalEmpty.appendChild(logEl);
+      }
+      logEl.textContent = workspaceInfo || '탐색 정보 없음';
       return;
     }
 
-    modalEmpty.style.display = 'none';
-    modalModuleList.style.display = 'block';
-    modalFooter.style.display = 'flex';
+    modalEmpty.classList.add('hidden');
+    modalModuleList.classList.remove('hidden');
+    modalFooter.classList.remove('hidden');
     moduleListContainer.innerHTML = '';
 
     // 이미 추가된 서비스의 modulePath 목록

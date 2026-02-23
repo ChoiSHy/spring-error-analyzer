@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { EventEmitter } from 'events';
-import { SpringBootService } from './SpringBootService';
+import { SpringBootService, JdtMode } from './SpringBootService';
 import { ServiceInfo, AnalysisResult, ErrorBlock, ServiceSnapshot } from '../types';
 
 export interface DetectedModule {
@@ -50,6 +50,88 @@ export class ServiceManager extends EventEmitter {
 
     return modules;
   }
+
+  /** 디버그용: 탐색 과정 상세 로그 반환 */
+  async detectModulesWithLog(): Promise<{ modules: DetectedModule[]; log: string[] }> {
+    const modules: DetectedModule[] = [];
+    const log: string[] = [];
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+
+    if (!workspaceFolders) {
+      log.push('❌ 열린 워크스페이스 없음');
+      return { modules, log };
+    }
+
+    for (const folder of workspaceFolders) {
+      const rootPath = folder.uri.fsPath;
+      log.push(`📁 워크스페이스: ${rootPath}`);
+      await this.scanForModulesWithLog(rootPath, modules, 0, log);
+    }
+
+    if (modules.length === 0) {
+      log.push('⚠️ 탐색 완료 - 모듈 없음');
+    } else {
+      log.push(`✅ 탐색 완료 - ${modules.length}개 발견`);
+    }
+
+    return { modules, log };
+  }
+
+  private async scanForModulesWithLog(
+    dirPath: string,
+    modules: DetectedModule[],
+    depth: number,
+    log: string[]
+  ): Promise<void> {
+    if (depth > 4) return;
+
+    const indent = '  '.repeat(depth);
+    const hasGradle = fs.existsSync(path.join(dirPath, 'build.gradle')) ||
+      fs.existsSync(path.join(dirPath, 'build.gradle.kts'));
+    const hasMaven = fs.existsSync(path.join(dirPath, 'pom.xml'));
+    const hasSrcMain = fs.existsSync(path.join(dirPath, 'src', 'main'));
+    const hasSrcMainJava = fs.existsSync(path.join(dirPath, 'src', 'main', 'java')) ||
+      fs.existsSync(path.join(dirPath, 'src', 'main', 'kotlin'));
+
+    if (hasGradle || hasMaven) {
+      const isMavenParent = hasMaven && (() => {
+        try {
+          const content = fs.readFileSync(path.join(dirPath, 'pom.xml'), 'utf-8');
+          return content.includes('<packaging>pom</packaging>');
+        } catch { return false; }
+      })();
+
+      const hasSrc = hasSrcMain || hasSrcMainJava;
+      const name = path.basename(dirPath);
+
+      if (isMavenParent) {
+        log.push(`${indent}⏭️ ${name} - Maven parent pom (제외)`);
+      } else if (!hasSrc) {
+        log.push(`${indent}⚠️ ${name} - build 파일 있음, src/main 없음 (제외)`);
+      } else {
+        log.push(`${indent}✅ ${name} - ${hasGradle ? 'gradle' : 'maven'} 모듈 발견`);
+        modules.push({
+          name,
+          modulePath: dirPath,
+          buildTool: hasGradle ? 'gradle' : 'maven',
+        });
+        return; // 모듈 발견 시 하위 탐색 불필요
+      }
+    }
+
+    // 하위 디렉토리 탐색
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const skipDirs = new Set(['.git', 'node_modules', 'build', 'target', 'out', '.idea', '.gradle']);
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.') && !skipDirs.has(entry.name)) {
+          await this.scanForModulesWithLog(path.join(dirPath, entry.name), modules, depth + 1, log);
+        }
+      }
+    } catch {
+      log.push(`${indent}❌ 접근 오류: ${dirPath}`);
+    }
+  }
   private findMavenParent(startDir: string): string | undefined {
     let current = startDir;
 
@@ -83,8 +165,21 @@ export class ServiceManager extends EventEmitter {
       fs.existsSync(path.join(dirPath, 'build.gradle.kts'));
     const hasMaven = fs.existsSync(path.join(dirPath, 'pom.xml'));
     const hasSrcMain = fs.existsSync(path.join(dirPath, 'src', 'main'));
+    const hasSrcMainJava = fs.existsSync(path.join(dirPath, 'src', 'main', 'java')) ||
+      fs.existsSync(path.join(dirPath, 'src', 'main', 'kotlin'));
 
-    if ((hasGradle || hasMaven) && hasSrcMain) {
+    // Maven parent pom (packaging=pom)은 실행 대상이 아님 → 제외
+    const isMavenParent = hasMaven && (() => {
+      try {
+        const content = fs.readFileSync(path.join(dirPath, 'pom.xml'), 'utf-8');
+        return content.includes('<packaging>pom</packaging>');
+      } catch { return false; }
+    })();
+
+    // src/main 또는 src/main/java(kotlin) 중 하나라도 있으면 Spring Boot 모듈로 간주
+    const isSpringModule = (hasGradle || hasMaven) && (hasSrcMain || hasSrcMainJava) && !isMavenParent;
+
+    if (isSpringModule) {
       const name = path.basename(dirPath);
 
       let parentPath: string | undefined;
@@ -171,7 +266,8 @@ export class ServiceManager extends EventEmitter {
     const maxRequests = config.get<number>('maxAiRequestsPerMinute', 10);
     const profiles = config.get<string>('bootRunProfiles', '');
     const jvmArgs = config.get<string>('jvmArgs', '');
-    service.start(apiKey, model, maxRequests, profiles || undefined, jvmArgs || undefined);
+    const useJdt = config.get<JdtMode>('useJdt', 'auto');
+    service.start(apiKey, model, maxRequests, profiles || undefined, jvmArgs || undefined, useJdt);
   }
 
   stopService(id: string): void {
