@@ -68,6 +68,8 @@ export class SpringBootService extends EventEmitter {
   private _errors: ErrorBlock[] = [];
   private _analyses: AnalysisResult[] = [];
   private readonly _logBuf = new CircularBuffer<{ line: string; level: string }>(MAX_LOG_LINES);
+  private _debugMode = false;
+  private _debugPort = 5005;
 
   constructor(
     public readonly id: string,
@@ -110,7 +112,9 @@ export class SpringBootService extends EventEmitter {
     maxRequestsPerMinute: number,
     profiles?: string,
     jvmArgs?: string,
-    useJdt: JdtMode = 'auto'
+    useJdt: JdtMode = 'auto',
+    debug = false,
+    debugPort = 5005
   ): void {
     // 이미 실행 중이면 무시
     if (this.springProcess && (this._status === 'starting' || this._status === 'running')) {
@@ -124,6 +128,8 @@ export class SpringBootService extends EventEmitter {
     this._errors = [];
     this._analyses = [];
     this._logBuf.clear();
+    this._debugMode = debug;
+    this._debugPort = debugPort;
     this.claudeAnalyzer.configure(apiKey, model, maxRequestsPerMinute);
 
     const env: Record<string, string> = { ...process.env as Record<string, string> };
@@ -375,6 +381,10 @@ export class SpringBootService extends EventEmitter {
 
       // 3. java -cp ... MainClass 직접 실행
       const javaArgs: string[] = [];
+      if (this._debugMode) {
+        javaArgs.push(`-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${this._debugPort}`);
+        this._log(`[spring-advisor] JDT 디버그 모드: JDWP 포트 ${this._debugPort} (VS Code에서 "Attach to Remote JVM"으로 연결하세요)`, 'INFO');
+      }
       if (jvmArgs) {
         javaArgs.push(...jvmArgs.split(/\s+/).filter(Boolean));
       }
@@ -465,8 +475,16 @@ export class SpringBootService extends EventEmitter {
 
   private _launchProcess(env: Record<string, string>): void {
     const { cmd, args, cwd } = this._findExecutable();
+
+    if (this._debugMode) {
+      args.push(`-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${this._debugPort}`);
+    }
+
     this._updateStatus('starting');
     this._log(`[spring-advisor] Starting: ${cmd} ${args.join(' ')} (cwd: ${cwd})`, 'INFO');
+    if (this._debugMode) {
+      this._log(`[spring-advisor] 디버그 모드 활성화: JDWP 포트 ${this._debugPort} (VS Code에서 "Attach to Remote JVM"으로 연결하세요)`, 'INFO');
+    }
 
     const parser = this._resetLogParser();
     parser.on('error', (errorBlock: ErrorBlock) => {

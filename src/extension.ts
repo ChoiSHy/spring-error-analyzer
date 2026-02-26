@@ -64,10 +64,9 @@ export function activate(context: vscode.ExtensionContext): void {
       // Open dashboard
       webviewProvider.show();
 
-      // Add and start each selected service
+      // Add each selected service (without auto-start)
       for (const item of selected) {
-        const service = await serviceManager.addService(item.module);
-        serviceManager.startService(service.id);
+        await serviceManager.addService(item.module);
       }
     })
   );

@@ -34,6 +34,7 @@
   const serviceName      = document.getElementById('service-name');
   const serviceStatus    = document.getElementById('service-status');
   const btnStart         = document.getElementById('btn-start');
+  const btnDebug         = document.getElementById('btn-debug');
   const btnStop          = document.getElementById('btn-stop');
   const logContainer     = document.getElementById('log-container');
   const errorCount       = document.getElementById('error-count');
@@ -73,6 +74,12 @@
   btnStart?.addEventListener('click', () => {
     if (activeServiceId) {
       vscode.postMessage({ type: 'startService', serviceId: activeServiceId });
+    }
+  });
+
+  btnDebug?.addEventListener('click', () => {
+    if (activeServiceId) {
+      vscode.postMessage({ type: 'startServiceDebug', serviceId: activeServiceId });
     }
   });
 
@@ -131,6 +138,15 @@
 
   // 헤더 "＋ 서비스 추가" 버튼
   document.getElementById('btn-add-service')?.addEventListener('click', openAddServiceModal);
+
+  // 전체 시작 / 전체 DEBUG 버튼
+  document.getElementById('btn-start-all')?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'startAllServices' });
+  });
+
+  document.getElementById('btn-debug-all')?.addEventListener('click', () => {
+    vscode.postMessage({ type: 'startAllServicesDebug' });
+  });
   // 빈 화면 "＋ 서비스 추가" 버튼
   document.getElementById('btn-add-service-empty')?.addEventListener('click', openAddServiceModal);
 
@@ -348,8 +364,10 @@
   }
 
   function updateButtons(status) {
-    if (btnStart) /** @type {HTMLButtonElement} */ (btnStart).disabled = status === 'starting' || status === 'running';
-    if (btnStop)  /** @type {HTMLButtonElement} */ (btnStop).disabled  = status === 'idle'     || status === 'stopped';
+    const isRunning = status === 'starting' || status === 'running';
+    if (btnStart) /** @type {HTMLButtonElement} */ (btnStart).disabled = isRunning;
+    if (btnDebug) /** @type {HTMLButtonElement} */ (btnDebug).disabled = isRunning;
+    if (btnStop)  /** @type {HTMLButtonElement} */ (btnStop).disabled  = status === 'idle' || status === 'stopped';
   }
 
   // ── 로그 처리 ───────────────────────────────────────────────

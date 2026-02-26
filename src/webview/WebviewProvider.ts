@@ -128,6 +128,10 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
         this.serviceManager.startService(msg.serviceId);
         break;
 
+      case 'startServiceDebug':
+        this.serviceManager.startService(msg.serviceId, true);
+        break;
+
       case 'stopService':
         this.serviceManager.stopService(msg.serviceId);
         break;
@@ -152,6 +156,14 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
       case 'addAndStartModules':
         this.addAndStartModules(msg.modulePaths);
         break;
+
+      case 'startAllServices':
+        this.serviceManager.startAll(false);
+        break;
+
+      case 'startAllServicesDebug':
+        this.serviceManager.startAll(true);
+        break;
     }
   }
 
@@ -168,7 +180,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
     this.postMessage({ type: 'detectModulesResult', modules, workspaceInfo: log.join('\n') });
   }
 
-  /** 선택된 modulePath 목록으로 서비스 추가 & 시작 */
+  /** 선택된 modulePath 목록으로 서비스 추가 */
   private async addAndStartModules(modulePaths: string[]): Promise<void> {
     const detected = await this.serviceManager.detectModules();
     const targets = detected.filter((m) => modulePaths.includes(m.modulePath));
@@ -177,8 +189,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
     this.show();
 
     for (const module of targets) {
-      const service = await this.serviceManager.addService(module);
-      this.serviceManager.startService(service.id);
+      await this.serviceManager.addService(module);
     }
   }
 
@@ -272,7 +283,11 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
     <header id="header">
       <div id="header-top">
         <h1>Spring Boot Error Analyzer</h1>
-        <button id="btn-add-service" class="btn btn-add-service" title="서비스 추가">＋ 서비스 추가</button>
+        <div id="header-actions">
+          <button id="btn-start-all" class="btn btn-start" title="모든 서비스 시작">전체 시작</button>
+          <button id="btn-debug-all" class="btn btn-debug" title="모든 서비스 디버그 시작">전체 DEBUG</button>
+          <button id="btn-add-service" class="btn btn-add-service" title="서비스 추가">＋ 서비스 추가</button>
+        </div>
       </div>
       <div id="service-tabs"></div>
     </header>
@@ -286,6 +301,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
           <span id="service-name"></span>
           <span id="service-status" class="badge"></span>
           <button id="btn-start" class="btn btn-start">Start</button>
+          <button id="btn-debug" class="btn btn-debug" title="JDWP 디버그 모드로 실행">Debug</button>
           <button id="btn-stop" class="btn btn-stop">Stop</button>
         </div>
         <div id="panels">
@@ -347,7 +363,7 @@ export class WebviewProvider implements vscode.WebviewViewProvider {
       <div class="modal-footer hidden" id="modal-footer">
         <span id="modal-selected-count" class="modal-selected-count">0개 선택됨</span>
         <button id="modal-cancel" class="btn btn-small">취소</button>
-        <button id="modal-confirm" class="btn btn-start" disabled>추가 및 시작</button>
+        <button id="modal-confirm" class="btn btn-start" disabled>추가</button>
       </div>
     </div>
   </div>

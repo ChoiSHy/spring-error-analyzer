@@ -210,6 +210,15 @@ body {
   background: #45a049;
 }
 
+.btn-debug {
+  background: #7c4dff;
+  color: #fff;
+}
+
+.btn-debug:hover:not(:disabled) {
+  background: #6a3fd4;
+}
+
 .btn-stop {
   background: var(--badge-error);
   color: #fff;
@@ -677,6 +686,12 @@ body {
 
 #header-top h1 {
   margin-bottom: 0;
+}
+
+#header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .btn-add-service {

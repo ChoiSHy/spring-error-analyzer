@@ -74,6 +74,11 @@ export interface StartServiceMessage {
   serviceId: string;
 }
 
+export interface StartServiceDebugMessage {
+  type: 'startServiceDebug';
+  serviceId: string;
+}
+
 export interface StopServiceMessage {
   type: 'stopService';
   serviceId: string;
@@ -116,9 +121,18 @@ export interface AddAndStartModulesMessage {
   modulePaths: string[]; // 선택된 모듈들의 modulePath 목록
 }
 
+export interface StartAllServicesMessage {
+  type: 'startAllServices';
+}
+
+export interface StartAllServicesDebugMessage {
+  type: 'startAllServicesDebug';
+}
+
 export type WebviewToExtensionMessage =
   | RequestServiceListMessage
   | StartServiceMessage
+  | StartServiceDebugMessage
   | StopServiceMessage
   | GetErrorDetailsMessage
   | WebviewReadyMessage
@@ -126,7 +140,9 @@ export type WebviewToExtensionMessage =
   | RemoveServiceMessage
   | KillPortMessage
   | RequestDetectModulesMessage
-  | AddAndStartModulesMessage;
+  | AddAndStartModulesMessage
+  | StartAllServicesMessage
+  | StartAllServicesDebugMessage;
 
 // ===== Extension → Webview Messages =====
 

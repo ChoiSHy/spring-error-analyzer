@@ -256,7 +256,7 @@ export class ServiceManager extends EventEmitter {
     return service;
   }
 
-  startService(id: string): void {
+  startService(id: string, debug = false, debugPort?: number): void {
     const service = this.services.get(id);
     if (!service) return;
 
@@ -267,7 +267,8 @@ export class ServiceManager extends EventEmitter {
     const profiles = config.get<string>('bootRunProfiles', '');
     const jvmArgs = config.get<string>('jvmArgs', '');
     const useJdt = config.get<JdtMode>('useJdt', 'auto');
-    service.start(apiKey, model, maxRequests, profiles || undefined, jvmArgs || undefined, useJdt);
+    const resolvedPort = debugPort ?? config.get<number>('debugPort', 5005);
+    service.start(apiKey, model, maxRequests, profiles || undefined, jvmArgs || undefined, useJdt, debug, resolvedPort);
   }
 
   stopService(id: string): void {
@@ -281,6 +282,16 @@ export class ServiceManager extends EventEmitter {
     const service = this.services.get(serviceId);
     if (service) {
       service.requestAiAnalysis(error);
+    }
+  }
+
+  startAll(debug = false): void {
+    const config = vscode.workspace.getConfiguration('springErrorAnalyzer');
+    const basePort = config.get<number>('debugPort', 5005);
+    let portOffset = 0;
+    for (const id of this.services.keys()) {
+      const port = debug ? basePort + portOffset++ : undefined;
+      this.startService(id, debug, port);
     }
   }
 

@@ -18,6 +18,10 @@ const WARN_ERROR_PATTERN =
 const STACK_TRACE_LINE_REGEX = /^\s+at\s+/;
 const CAUSED_BY_REGEX = /^Caused by:\s+/;
 const EXCEPTION_LINE_REGEX = /^[\w.$]+(?:Exception|Error|Throwable)/;
+// MyBatis / JDBC 에러 블록 라인 (### Error querying ..., ### Cause: ...)
+const MYBATIS_ERROR_LINE_REGEX = /^###\s+(Error|Cause|The error|SQL)/i;
+// ANSI 이스케이프 코드 (Spring Boot 컬러 로그 대응)
+const ANSI_ESCAPE_REGEX = /\x1B\[[0-9;]*[mGKHF]/g;
 
 export class LogParser extends EventEmitter {
   private currentError: Partial<ErrorBlock> | null = null;
@@ -33,9 +37,8 @@ export class LogParser extends EventEmitter {
   }
 
   parseLine(raw: string): void {
-    // Some appenders (e.g. Logback's PatternLayout with %replace) encode newlines as literal "<EOL>".
-    // Normalise them back to real newlines so downstream pattern matching works correctly.
-    const trimmed = raw.trimEnd().replace(/<EOL>/g, '\n');
+    // Strip ANSI escape codes (Spring Boot 컬러 로그 대응) and normalise <EOL> → real newlines.
+    const trimmed = raw.trimEnd().replace(ANSI_ESCAPE_REGEX, '').replace(/<EOL>/g, '\n');
 
     // Empty lines: keep them if we're collecting an error block
     if (!trimmed) {
@@ -94,6 +97,7 @@ export class LogParser extends EventEmitter {
             STACK_TRACE_LINE_REGEX.test(t) ||
             CAUSED_BY_REGEX.test(t) ||
             EXCEPTION_LINE_REGEX.test(t) ||
+            MYBATIS_ERROR_LINE_REGEX.test(t) ||
             t.startsWith('\t') ||
             t.startsWith('    ...')
           ) {
@@ -110,6 +114,7 @@ export class LogParser extends EventEmitter {
         STACK_TRACE_LINE_REGEX.test(trimmed) ||
         CAUSED_BY_REGEX.test(trimmed) ||
         EXCEPTION_LINE_REGEX.test(trimmed) ||
+        MYBATIS_ERROR_LINE_REGEX.test(trimmed) ||
         trimmed.startsWith('\t') ||
         trimmed.startsWith('    ...')
       ) {
@@ -146,6 +151,17 @@ export class LogParser extends EventEmitter {
           return t && !/^\*+$/.test(t);
         });
       message = meaningful.join(' | ') || 'Error (see details)';
+    }
+
+    // message가 `:` 로 끝나면 (예: "Resolved [BadSqlGrammarException: ") 스택트레이스 첫 줄로 보완
+    // → MyBatis `### Cause: ...` 또는 `### Error querying database...` 내용을 이어붙임
+    if (message.trimEnd().endsWith(':') && this.stackTraceBuffer.length > 0) {
+      const causeHint = this.stackTraceBuffer
+        .map(l => l.trim())
+        .find(l => l.startsWith('###') || l.startsWith('Caused by:'));
+      if (causeHint) {
+        message = message.trimEnd() + ' ' + causeHint.replace(/^###\s*(Cause:|Error\s+querying\s+database\.?\s*)/i, '').trim();
+      }
     }
 
     if (message.trim()) {

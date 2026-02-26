@@ -2,7 +2,7 @@
   "name": "spring-boot-error-analyzer",
   "displayName": "Spring Boot Error Analyzer",
   "description": "Analyze Spring Boot error logs with local pattern matching and Claude AI",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "publisher": "spring-advisor",
   "engines": {
     "vscode": "^1.85.0"
@@ -95,6 +95,11 @@
           ],
           "default": "auto",
           "description": "Spring Boot 실행 방식: JDT(빠름, redhat.java 필요) 또는 bootRun(범용)"
+        },
+        "springErrorAnalyzer.debugPort": {
+          "type": "number",
+          "default": 5005,
+          "description": "디버그 모드 실행 시 JDWP가 리슨할 포트 번호"
         }
       }
     }
